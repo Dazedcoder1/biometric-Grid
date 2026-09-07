@@ -1,0 +1,31 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+# 0.28.0 ships no Python 3.12 wheel for Windows and tries to compile (needs MSVC).
+# 0.30.0 has a prebuilt cp312 win_amd64 wheel.
+asyncpg==0.30.0
+alembic==1.12.1
+# [email] pulls email-validator, required by EmailStr in app/schemas + auth routes
+pydantic[email]==2.5.2
+pydantic-settings==2.0.3
+paho-mqtt==1.6.1
+redis==5.0.1
+python-dotenv==1.0.0
+greenlet==3.0.1
+boto3
+
+# --- Imported by app/ but previously missing from this file ---
+# app/core/security.py       -> from jose import ...
+python-jose[cryptography]==3.3.0
+# app/core/security.py       -> CryptContext(schemes=["bcrypt"])
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 is incompatible with bcrypt 5.x
+bcrypt>=4.0.1,<5.0.0
+# app/api/routes/auth        -> OAuth2PasswordRequestForm (form parsing)
+python-multipart==0.0.6
+
+# --- Task manager / GitHub integration ---
+# Async HTTP client for the GitHub API
+httpx==0.25.2
+# Fernet encryption for GitHub tokens at rest (also pulled by python-jose above)
+cryptography>=41.0.0

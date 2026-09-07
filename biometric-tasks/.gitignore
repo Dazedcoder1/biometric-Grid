@@ -1,0 +1,63 @@
+# ----------------------
+# Environment variables
+# ----------------------
+.env
+.env.*
+!.env.example
+
+# ----------------------
+# Python
+# ----------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+venv/
+env/
+ENV/
+.venv/
+
+# ----------------------
+# Database
+# ----------------------
+*.sqlite3
+*.db
+
+# ----------------------
+# Node / frontend
+# ----------------------
+node_modules/
+dist/
+dist-ssr/
+build/
+
+# ----------------------
+# Logs
+# ----------------------
+logs/
+*.log
+
+# ----------------------
+# IDE / OS
+# ----------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# Testing / cache
+# ----------------------
+.pytest_cache/
+.cache/
+coverage/
+coverage.xml
+
+# ----------------------
+# Misc
+# ----------------------
+combined_project_code.txt
+combined_project_code_*.txt
+*.tmp

@@ -1,0 +1,7 @@
+services:
+  frontend:
+    build: .
+    container_name: attendance-frontend
+    restart: always
+    ports:
+      - "9002:80"

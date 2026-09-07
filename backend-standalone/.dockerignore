@@ -1,0 +1,39 @@
+# Secrets — never bake these into an image layer.
+# env_file in docker-compose.yml injects them at runtime instead.
+.env
+.env.*
+!.env.example
+
+# VCS
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+env/
+ENV/
+
+# Local databases
+*.db
+*.sqlite3
+
+# Tooling / editor
+.vscode/
+.idea/
+.pytest_cache/
+.cache/
+coverage/
+coverage.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+combined_project_code.txt
+combined_project_code_*.txt
+*.log

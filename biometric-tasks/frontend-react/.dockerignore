@@ -1,0 +1,24 @@
+# NOTE: .env is deliberately NOT ignored here.
+# Vite inlines VITE_* vars at build time (`npm run build`), so the file must be
+# present in the build context. These values are public by design — they end up
+# in the shipped JS bundle either way. Never put a secret in the frontend .env.
+
+node_modules/
+dist/
+dist-ssr/
+build/
+
+.git
+.gitignore
+
+.vscode/
+.idea/
+coverage/
+
+.DS_Store
+Thumbs.db
+
+*.log
+npm-debug.log*
+combined_project_code.txt
+combined_project_code_*.txt
