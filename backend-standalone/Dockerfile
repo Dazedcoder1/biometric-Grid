@@ -1,26 +1,29 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Prevent Python from writing .pyc files and buffering stdout/stderr
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies for PostgreSQL
+# System dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Copy application
 COPY . .
 
-# Expose port 8000 for the FastAPI app
+# Make startup script executable
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 8000
 
-# Start Uvicorn directly to bypass the Alembic crash
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

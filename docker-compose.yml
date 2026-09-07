@@ -1,0 +1,150 @@
+services:
+
+  # =========================================================
+  # PostgreSQL
+  # =========================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: biometric_grid_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: biometric
+      POSTGRES_USER: biometric
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - biometric_grid_postgres_data:/var/lib/postgresql/data
+
+    ports:
+      - "5433:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biometric -d biometric"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+    networks:
+      - biometric_grid
+
+
+  # =========================================================
+  # Redis
+  # =========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: biometric_grid_redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes
+
+    volumes:
+      - biometric_grid_redis_data:/data
+
+    ports:
+      - "7655:6379"
+
+    networks:
+      - biometric_grid
+
+
+  # =========================================================
+  # MQTT / Mosquitto
+  # =========================================================
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: biometric_grid_mqtt
+    restart: unless-stopped
+
+    ports:
+      - "1884:1883"
+
+    volumes:
+      - biometric_grid_mqtt_data:/mosquitto/data
+      - biometric_grid_mqtt_log:/mosquitto/log
+
+    networks:
+      - biometric_grid
+
+
+  # =========================================================
+  # FastAPI Backend
+  # =========================================================
+  backend:
+    build:
+      context: ./backend-standalone
+      dockerfile: Dockerfile
+
+    container_name: biometric_grid_backend
+    restart: unless-stopped
+
+    environment:
+      PROJECT_NAME: GridSphere IoT Core
+
+      DATABASE_URL: postgresql+asyncpg://biometric:${POSTGRES_PASSWORD}@postgres:5432/biometric
+
+      REDIS_URL: redis://redis:6379/0
+
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASS: ${MQTT_PASS:-}
+
+    ports:
+      - "9011:8000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_started
+
+      mqtt:
+        condition: service_started
+
+    networks:
+      - biometric_grid
+
+
+  # =========================================================
+  # React Frontend
+  # =========================================================
+  frontend:
+    build:
+      context: ./biometric-tasks/frontend-react
+      dockerfile: Dockerfile
+
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+
+    container_name: biometric_grid_frontend
+    restart: unless-stopped
+
+    ports:
+      - "9010:80"
+
+    depends_on:
+      - backend
+
+    networks:
+      - biometric_grid
+
+
+# ===========================================================
+# Persistent volumes
+# ===========================================================
+volumes:
+  biometric_grid_postgres_data:
+  biometric_grid_redis_data:
+  biometric_grid_mqtt_data:
+  biometric_grid_mqtt_log:
+
+
+# ===========================================================
+# Network
+# ===========================================================
+networks:
+  biometric_grid:
+    driver: bridge
