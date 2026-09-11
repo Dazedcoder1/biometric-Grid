@@ -22,7 +22,23 @@ if sys.platform == 'win32':
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+# asyncpg does not understand libpq parameters such as sslmode/channel_binding.
+# Neon requires TLS, so remove those URL parameters and pass ssl=True below.
+from sqlalchemy.engine import make_url
+
+db_url = make_url(database_url)
+query = dict(db_url.query)
+query.pop("sslmode", None)
+query.pop("channel_binding", None)
+db_url = db_url.set(query=query)
+
+config.set_main_option("sqlalchemy.url", db_url.render_as_string(hide_password=False))
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
@@ -46,6 +62,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"ssl": True},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

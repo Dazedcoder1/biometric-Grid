@@ -1,0 +1,25 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: biometric-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8400:8000"
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    container_name: biometric-frontend
+    restart: unless-stopped
+    ports:
+      - "3400:80"
+    depends_on:
+      - backend
