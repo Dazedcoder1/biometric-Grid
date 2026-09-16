@@ -1,0 +1,41 @@
+# Normalise line endings so Windows and Linux contributors stop overwriting
+# each other's whole files.
+#
+# Without this, a commit made on Linux rewrites every CRLF file to LF and shows
+# up as "45 files changed, 12000 insertions, 12000 deletions" with no actual
+# edits in it — which buries real changes and makes every merge a guess.
+#
+# `text=auto` stores everything as LF in the repository and checks it out with
+# whatever the platform expects.
+* text=auto
+
+# Files that must keep LF even on Windows: shell scripts fail with `bad
+# interpreter: /bin/sh^M` if they carry CRLF into a container.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+docker-entrypoint.sh text eol=lf
+.env.example    text eol=lf
+
+# Must keep CRLF: PowerShell is fine either way, but Windows tooling is not.
+*.ps1           text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# Binary — never touch, never diff.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.docx          binary
+*.xlsx          binary
+*.pptx          binary
+*.dump          binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+
+# Generated — collapse in diffs and reviews rather than scrolling 6000 lines.
+package-lock.json  -diff linguist-generated
