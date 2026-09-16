@@ -4,7 +4,7 @@
 // once, right after the repo is added — the server stores it encrypted and
 // cannot display it again.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CodeSquare as Github, Plus, RefreshCw, Trash2, AlertCircle, CheckCircle,
   Copy, X, Eye, EyeOff,
@@ -35,6 +35,16 @@ const GitHubRepos = () => {
   const [savingUser, setSavingUser] = useState(null);
   const [writeAccess, setWriteAccess] = useState({}); // repoId -> {can_write, reason}
 
+  // Logins GitHub will accept as assignees, pooled across every connected repo.
+  // GitHub only allows assignment to users with push access and drops anyone
+  // else silently, so a username outside this set will never stick.
+  const [assignable, setAssignable] = useState([]);      // [{login, avatar_url, html_url}]
+  const [assignableError, setAssignableError] = useState('');
+  const assignableLogins = useMemo(
+    () => new Set(assignable.map((a) => (a.login || '').toLowerCase())),
+    [assignable]
+  );
+
   const flash = (msg) => {
     setSuccess(msg);
     setTimeout(() => setSuccess(''), 4000);
@@ -56,11 +66,40 @@ const GitHubRepos = () => {
         )
       );
       setWriteAccess(Object.fromEntries(checks));
+      await loadAssignable(list);
     } catch (err) {
       setError(err.message || 'Failed to load repositories');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Pool the assignable users across every connected repo, de-duplicated by
+  // login. Someone with push access to any one of them can be assigned there,
+  // and the mapping is a single username per person regardless of repo.
+  const loadAssignable = async (list) => {
+    if (!list.length) {
+      setAssignable([]);
+      setAssignableError('');
+      return;
+    }
+    const results = await Promise.all(
+      list.map((r) =>
+        tenantTaskApi.repoAssignees(r.id)
+          .catch(() => ({ assignees: [], error: 'Could not reach GitHub.' }))
+      )
+    );
+    const byLogin = new Map();
+    for (const res of results) {
+      for (const u of res.assignees || []) {
+        if (u.login) byLogin.set(u.login.toLowerCase(), u);
+      }
+    }
+    setAssignable([...byLogin.values()]);
+    // Only complain if we ended up with nothing — one failing repo among
+    // several is not worth a banner.
+    const firstError = results.find((r) => r.error)?.error;
+    setAssignableError(byLogin.size === 0 && firstError ? firstError : '');
   };
 
   const loadMapping = async () => {
@@ -426,6 +465,29 @@ const GitHubRepos = () => {
           the issue when that person's GitHub login is set here. Users without
           one still get the task — the issue is just left unassigned.
         </p>
+        <p style={{ fontSize: '.82rem', opacity: .75, marginTop: 0 }}>
+          The box suggests everyone with push access to a connected repository.
+          GitHub refuses to assign anyone else — and does it silently, creating
+          the issue with the assignee dropped — so a name flagged below will
+          never stick until they accept a collaborator invite.
+        </p>
+
+        {assignableError && (
+          <div style={{
+            fontSize: '.8rem', padding: '.5rem .65rem', borderRadius: '6px',
+            background: 'rgba(220,160,40,.12)', marginBottom: '.75rem',
+          }}>
+            <AlertCircle size={13} style={{ verticalAlign: '-2px', marginRight: '.35rem' }} />
+            Couldn't load the assignable users: {assignableError} You can still
+            type usernames by hand.
+          </div>
+        )}
+
+        {/* Suggestions, not a hard list: someone invited but yet to accept
+            won't appear here, and you should still be able to enter them. */}
+        <datalist id="github-assignable-logins">
+          {assignable.map((a) => <option key={a.login} value={a.login} />)}
+        </datalist>
 
         {mapping.length === 0 ? (
           <div style={{ opacity: .6, fontSize: '.85rem' }}>No users found.</div>
@@ -450,16 +512,36 @@ const GitHubRepos = () => {
                     <td style={{ padding: '.5rem' }}>
                       <input
                         className="form-input"
+                        list="github-assignable-logins"
                         placeholder="octocat"
                         defaultValue={u.github_username || ''}
                         disabled={savingUser === u.id}
                         onBlur={(e) => {
-                          const v = e.target.value.trim();
+                          const v = e.target.value.trim().replace(/^@/, '');
                           if (v !== (u.github_username || '')) saveMapping(u.id, v);
                         }}
                         onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
                         style={{ width: '180px', padding: '.25rem .45rem' }}
                       />
+                      {u.github_username && assignable.length > 0 && (
+                        assignableLogins.has(u.github_username.toLowerCase()) ? (
+                          <div style={{
+                            fontSize: '.72rem', marginTop: '.25rem',
+                            color: 'var(--success, #2e9e5b)',
+                          }}>
+                            <CheckCircle size={11} style={{ verticalAlign: '-1px', marginRight: '.25rem' }} />
+                            Can be assigned
+                          </div>
+                        ) : (
+                          <div style={{
+                            fontSize: '.72rem', marginTop: '.25rem',
+                            color: 'var(--warning, #c98a1e)',
+                          }}>
+                            <AlertCircle size={11} style={{ verticalAlign: '-1px', marginRight: '.25rem' }} />
+                            No push access — assignment will be dropped
+                          </div>
+                        )
+                      )}
                     </td>
                   </tr>
                 ))}

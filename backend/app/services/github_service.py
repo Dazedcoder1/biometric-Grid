@@ -354,6 +354,60 @@ async def check_write_access(full_name: str, token: str | None) -> dict:
     }
 
 
+async def list_assignable_users(full_name: str, token: str | None) -> dict:
+    """
+    Who GitHub will actually accept as an assignee on this repository.
+
+    This is `/assignees`, not `/collaborators`, and the difference matters:
+    GitHub only permits assignment to users with push access, and it does not
+    complain when you send it anyone else — the issue is created or patched
+    successfully with the assignee silently dropped. So the only way to know an
+    assignment will stick is to check it against this list first.
+
+    Returns {"assignees": [{"login", "avatar_url", "html_url"}], "error": str|None}.
+    An error is reported rather than raised: the mapping table is still usable
+    by hand when GitHub is unreachable.
+    """
+    if not token:
+        return {"assignees": [], "error": "No token configured for this repository."}
+
+    collected: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            # Two pages is 200 people — far past any realistic team, and it
+            # keeps a misconfigured org from stalling the page.
+            for page in (1, 2):
+                resp = await client.get(
+                    f"{GITHUB_API}/repos/{full_name}/assignees",
+                    headers=_headers(token),
+                    params={"per_page": 100, "page": page},
+                )
+                if resp.status_code == 404:
+                    return {"assignees": [],
+                            "error": "Repository not found, or the token cannot see it."}
+                if resp.status_code != 200:
+                    return {"assignees": [],
+                            "error": f"GitHub returned {resp.status_code}."}
+
+                batch = resp.json() or []
+                collected.extend(
+                    {
+                        "login": u.get("login"),
+                        "avatar_url": u.get("avatar_url"),
+                        "html_url": u.get("html_url"),
+                    }
+                    for u in batch
+                    if u.get("login")
+                )
+                if len(batch) < 100:
+                    break
+    except httpx.HTTPError as exc:
+        return {"assignees": [], "error": f"Could not reach GitHub: {exc}"}
+
+    collected.sort(key=lambda u: (u["login"] or "").lower())
+    return {"assignees": collected, "error": None}
+
+
 async def verify_repo_access(full_name: str, token: str | None) -> dict:
     """Check a repo is reachable before saving its config, so errors surface early."""
     headers = {

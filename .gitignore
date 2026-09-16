@@ -16,6 +16,12 @@ env/
 *.sqlite
 *.sqlite3
 
+# Database dumps — these contain every row, including password hashes.
+# Never commit one, even to a private repository.
+*.dump
+*.sql
+*.sql.gz
+
 # Node
 node_modules/
 dist/

@@ -19,8 +19,14 @@ boto3
 python-jose[cryptography]==3.3.0
 # app/core/security.py       -> CryptContext(schemes=["bcrypt"])
 passlib[bcrypt]==1.7.4
-# passlib 1.7.4 is incompatible with bcrypt 5.x
-bcrypt>=4.0.1,<5.0.0
+# passlib 1.7.4 reads bcrypt.__about__.__version__ to detect the backend
+# version. That attribute was removed in bcrypt 4.1.0, so anything newer logs
+#     (trapped) error reading bcrypt version
+#     AttributeError: module 'bcrypt' has no attribute '__about__'
+# on the first hash. Hashing still works — passlib catches it, hence
+# "trapped" — but it looks like a failure in the logs every time.
+# passlib is unmaintained and will not be fixing it, so pin below 4.1.
+bcrypt>=4.0.1,<4.1.0
 # app/api/routes/auth        -> OAuth2PasswordRequestForm (form parsing)
 python-multipart==0.0.6
 

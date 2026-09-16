@@ -9,23 +9,51 @@ const getToken = () => localStorage.getItem('access_token');
 // Helper to get API key (for tenant)
 const getApiKey = () => localStorage.getItem('api_key');
 
-// Helper to get auth type
+// Helper to get auth type. Kept for callers that still read it; routing no
+// longer depends on it — see pickAuthHeaders().
 const getAuthType = () => localStorage.getItem('auth_type');
+
+// Everything under this prefix authenticates with the tenant API key.
+// Every other route uses a JWT.
+const TENANT_PREFIX = '/api/tenant/';
+
+/**
+ * Choose the credential from the ENDPOINT, not from a global `auth_type` flag.
+ *
+ * The old behaviour read one `auth_type` value and applied it to every
+ * request, which broke as soon as two roles were used in the same browser:
+ * signing in as Org Admin set auth_type='bearer', so an open Tenant Admin tab
+ * started sending `Authorization: Bearer <org-admin-jwt>` to /api/tenant/*.
+ * Those routes require an `X-API-Key` header, and FastAPI reports a missing
+ * required header as 422 Unprocessable Entity — which reads like a bad request
+ * body rather than "you sent the wrong credential".
+ *
+ * Deciding per endpoint makes the choice unambiguous no matter what was signed
+ * into last, and lets both sessions coexist.
+ */
+function pickAuthHeaders(endpoint) {
+  const headers = {};
+  const token = getToken();
+
+  if (endpoint.startsWith(TENANT_PREFIX)) {
+    const apiKey = getApiKey();
+    // Prefer the API key; fall back to the JWT. The backend accepts either on
+    // these routes, so a tenant admin signed in with email and password works
+    // without having the key to hand. Sending neither used to surface as a
+    // 422; now it is a 401 with a sentence explaining itself.
+    if (apiKey) headers['X-API-Key'] = apiKey;
+    else if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }
+
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
 
 // Generic API request function
 async function apiRequest(endpoint, options = {}) {
-  const token = getToken();
-  const apiKey = getApiKey();
-  const authType = getAuthType();
-  
-  const headers = {};
-  
-  if (authType === 'api_key' && apiKey) {
-    headers['X-API-Key'] = apiKey;
-  } else if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
+  const headers = pickAuthHeaders(endpoint);
+
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
@@ -254,7 +282,10 @@ export const authApi = {
         throw new Error(error.detail || 'Login failed');
       }
       const data = await response.json();
-      localStorage.removeItem('api_key');
+      // The tenant API key is deliberately left alone. It lives under a
+      // different key and is only used for /api/tenant/*, so keeping it lets a
+      // Tenant Admin tab stay signed in while you use another role elsewhere.
+      // Removing it here is what used to break that tab with a 422.
       localStorage.setItem('auth_type', 'bearer');
       localStorage.setItem('access_token', data.access_token);
       if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
@@ -273,8 +304,8 @@ export const authApi = {
         throw new Error(error.detail || 'Invalid API Key');
       }
       const data = await response.json();
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      // Likewise: the JWT is left in place. Signing in as Tenant Admin used to
+      // delete it, silently logging out an Org Admin or Employee tab.
       localStorage.setItem('api_key', apiKey);
       localStorage.setItem('auth_type', 'api_key');
       return data;
@@ -376,6 +407,8 @@ export const tenantTaskApi = {
   syncRepo: (id) => apiRequest(`/api/tenant/github/repos/${id}/sync`, { method: 'POST' }),
   syncAll: () => apiRequest('/api/tenant/github/sync', { method: 'POST' }),
   writeAccess: (id) => apiRequest(`/api/tenant/github/repos/${id}/write-access`),
+  // Who GitHub will accept as an assignee on this repo (push access only)
+  repoAssignees: (id) => apiRequest(`/api/tenant/github/repos/${id}/assignees`),
 
   // GitHub login mapping, needed to mirror assignment onto issues
   listUserMapping: () => apiRequest('/api/tenant/github/user-mapping'),

@@ -252,13 +252,35 @@ default** if you want every new task to open an issue there.
 The server verifies the repo with GitHub before saving, imports existing issues,
 and shows a **webhook secret once**. Copy it if you plan to set up webhooks.
 
-### Step 3 — Map GitHub usernames (optional)
+### Step 3 — Map GitHub usernames (needed for assignment)
 
 **GitHub Repos** page → *GitHub usernames* table at the bottom.
 
 GitHub cannot resolve `employee@yourcompany.com` to a GitHub user, so assignment
 only mirrors onto issues for people whose GitHub login is entered here. People
 without one still receive the task; the issue is left unassigned.
+
+**The person must have push access to the repository.** GitHub only permits
+assignment to collaborators, and — this is the part that bites — it does not
+return an error when you send it anyone else. The issue is created or patched
+successfully with the assignee quietly dropped, so a typo or a non-collaborator
+looks identical to success until you open the issue and find it unassigned.
+
+The username box guards against this. It suggests everyone GitHub reports as
+assignable (`GET /repos/{owner}/{repo}/assignees`, pooled across all connected
+repos), and flags any saved username that isn't in that set:
+
+- ✅ **Can be assigned** — the mapping will work.
+- ⚠️ **No push access — assignment will be dropped** — either the login is
+  wrong, or they haven't been added to the repo, or they were invited and
+  haven't accepted yet. The field still accepts the name so you can enter
+  someone ahead of their invite; the warning clears once they accept.
+
+To add someone: repo → **Settings → Collaborators → Add people**. They must
+accept the invitation before they become assignable.
+
+The suggestion list needs only the **Issues: read** permission the token already
+has from step 1 — no extra scope.
 
 > 📷 *Screenshot to add: `docs/images/03-username-mapping.png` — the GitHub
 > usernames table.*

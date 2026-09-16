@@ -2,6 +2,8 @@ import paho.mqtt.client as mqtt
 import json
 import asyncio
 import logging
+import os
+import socket
 from app.core.config import settings
 # FIX: Import from db.session, not api.dependencies
 from app.db.session import AsyncSessionLocal
@@ -12,7 +14,19 @@ logger = logging.getLogger(__name__)
 
 class MQTTManager:
     def __init__(self):
-        self.client = mqtt.Client(client_id="gridsphere_backend")
+        # MQTT client ids must be unique across everything connected to the
+        # broker. When two processes share one, the broker kicks whichever
+        # connected first — paho immediately reconnects, kicking the other —
+        # and they knock each other offline forever. In the log that looks like
+        # "Connected to MQTT Broker successfully." repeating endlessly, which
+        # reads like success rather than a fight.
+        #
+        # A hardcoded id made this certain the moment a second process existed:
+        # uvicorn --reload, a colleague's backend, or the production server on
+        # the same broker. Host plus pid keeps every process distinct.
+        client_id = f"gridsphere_backend-{socket.gethostname()}-{os.getpid()}"
+        self.client = mqtt.Client(client_id=client_id)
+        logger.info("MQTT client id: %s", client_id)
         if settings.MQTT_USER:
             self.client.username_pw_set(settings.MQTT_USER, settings.MQTT_PASS)
         

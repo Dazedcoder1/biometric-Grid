@@ -286,6 +286,32 @@ async def write_access(
     return await github_service.check_write_access(repo.full_name, token)
 
 
+@router.get("/github/repos/{repo_id}/assignees")
+async def repo_assignees(
+    repo_id: int,
+    tenant: Tenant = Depends(verify_tenant_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    The people GitHub will accept as assignees on this repository.
+
+    Used to turn the username mapping below from free text into a real choice.
+    GitHub accepts an issue write containing an unassignable login without
+    complaint and just drops the assignee, so checking against this list is the
+    only way to know an assignment will actually stick.
+    """
+    repo = (
+        await db.execute(
+            select(GitHubRepo).where(GitHubRepo.id == repo_id, GitHubRepo.tenant_id == tenant.id)
+        )
+    ).scalars().first()
+    if not repo:
+        raise HTTPException(404, "Repository not configured")
+
+    token = crypto.decrypt(repo.token_encrypted) if repo.token_encrypted else None
+    return await github_service.list_assignable_users(repo.full_name, token)
+
+
 # ─── GitHub username mapping ──────────────────────────────────────────────────
 
 @router.get("/github/user-mapping")

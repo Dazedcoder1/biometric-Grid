@@ -7,10 +7,38 @@ const CredentialsModal = ({ isOpen, onClose, credentials, title, type }) => {
 
   if (!isOpen || !credentials) return null;
 
-  const copyToClipboard = (text, fieldName) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(fieldName);
-    setTimeout(() => setCopiedField(null), 2000);
+  // writeText rejects outside a secure context and when permission is denied,
+  // and an unhandled rejection here would leave the tick showing as though the
+  // copy had worked. Fall back to a hidden textarea + execCommand.
+  const copyToClipboard = async (text, fieldName) => {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      try {
+        const scratch = document.createElement('textarea');
+        scratch.value = text;
+        scratch.setAttribute('readonly', '');
+        scratch.style.position = 'fixed';
+        scratch.style.opacity = '0';
+        document.body.appendChild(scratch);
+        scratch.select();
+        ok = document.execCommand('copy');
+        document.body.removeChild(scratch);
+      } catch {
+        ok = false;
+      }
+    }
+    setCopiedField(ok ? fieldName : null);
+    if (ok) setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const copyAll = () => {
+    const lines = fieldsToShow
+      .filter((f) => credentials[f])
+      .map((f) => `${getFieldLabel(f)}: ${credentials[f]}`);
+    copyToClipboard(lines.join('\n'), '__all__');
   };
 
   const getFieldIcon = (field) => {
@@ -46,9 +74,12 @@ const CredentialsModal = ({ isOpen, onClose, credentials, title, type }) => {
     ? ['name', 'employee_code', 'finger_id', 'password']
     : ['name', 'email', 'dept_name', 'password'];
 
+  // Deliberately no click-outside-to-close on the overlay. The password is
+  // shown exactly once and cannot be retrieved, so a stray click on the
+  // backdrop must not discard it. Closing is the X or the footer button.
   return (
-    <div className="credentials-modal-overlay" onClick={onClose}>
-      <div className="credentials-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="credentials-modal-overlay">
+      <div className="credentials-modal">
         <button className="credentials-modal-close" onClick={onClose}>
           <X size={20} />
         </button>
@@ -88,8 +119,12 @@ const CredentialsModal = ({ isOpen, onClose, credentials, title, type }) => {
         </div>
 
         <div className="credentials-modal-footer">
+          <button className="credentials-modal-btn-secondary" onClick={copyAll}>
+            {copiedField === '__all__' ? <CheckCircle size={14} /> : <Copy size={14} />}
+            {copiedField === '__all__' ? 'Copied' : 'Copy all'}
+          </button>
           <button className="credentials-modal-btn" onClick={onClose}>
-            I've Saved These Credentials
+            I've saved these credentials
           </button>
         </div>
       </div>
@@ -260,10 +295,36 @@ const CredentialsModal = ({ isOpen, onClose, credentials, title, type }) => {
         .credentials-modal-footer {
           padding: 16px 28px 28px 28px;
           border-top: 1px solid var(--border);
+          display: flex;
+          gap: 10px;
+          align-items: stretch;
         }
-        
+
+        .credentials-modal-btn-secondary {
+          flex: 0 0 auto;
+          padding: 12px 16px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          color: var(--text2);
+          font-weight: 600;
+          font-size: 0.85rem;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          white-space: nowrap;
+        }
+
+        .credentials-modal-btn-secondary:hover {
+          background: var(--bg4);
+          color: var(--text);
+          border-color: var(--teal);
+        }
+
         .credentials-modal-btn {
-          width: 100%;
+          flex: 1;
           padding: 12px;
           background: var(--teal);
           border: none;
@@ -286,6 +347,15 @@ const CredentialsModal = ({ isOpen, onClose, credentials, title, type }) => {
           }
           .credential-value {
             font-size: 0.75rem;
+          }
+          /* Side by side, the two buttons squeeze the labels onto two lines
+             at phone width. Stack them, primary action first. */
+          .credentials-modal-footer {
+            flex-direction: column-reverse;
+            padding: 16px 20px 20px 20px;
+          }
+          .credentials-modal-btn-secondary {
+            justify-content: center;
           }
         }
       `}</style>
