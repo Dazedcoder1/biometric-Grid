@@ -18,6 +18,7 @@ import DashboardLayout from '../../layouts/DashboardLayout';
 import { useAuth } from '../../context/AuthContext';
 import { vaultApi } from '../../services/api';
 import { sidebarPropsFor } from '../../utils/sidebarRole';
+import './vault.css';
 
 const ROW = 34;
 const TOP = 30;
@@ -78,63 +79,50 @@ export default function DependencyMap() {
       <style>{`
         .dm-node { cursor:pointer; }
         .dm-label { font-size:11px; fill:var(--text2); font-family:var(--mono); }
-        .dm-stat { flex:1; min-width:130px; padding:.7rem .9rem;
-          background:var(--bg2); border:1px solid var(--border);
-          border-radius:10px; }
-        .dm-head { font-family:var(--mono); font-size:.68rem;
-          text-transform:uppercase; opacity:.55; }
       `}</style>
 
       {error && (
-        <div style={{ padding: '.6rem .8rem', borderRadius: 8, marginBottom: '1rem',
-          background: 'rgba(239,68,68,.12)', fontSize: '.85rem' }}>
-          <AlertCircle size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-          {error}
+        <div className="v-banner bad">
+          <AlertCircle size={14} />
+          <span>{error}</span>
         </div>
       )}
 
       {graph && (
         <>
-          <div style={{ display: 'flex', gap: '.7rem', marginBottom: '1rem',
-            flexWrap: 'wrap' }}>
-            <div className="dm-stat">
-              <div className="dm-head">Credentials</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                {graph.stats.credentials}
-              </div>
+          <div className="v-stats">
+            <div className="v-stat">
+              <div className="v-stat-label">Credentials</div>
+              <div className="v-stat-value">{graph.stats.credentials}</div>
             </div>
-            <div className="dm-stat">
-              <div className="dm-head">Systems</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                {graph.stats.systems}
-              </div>
+            <div className="v-stat">
+              <div className="v-stat-label">Systems</div>
+              <div className="v-stat-value">{graph.stats.systems}</div>
             </div>
-            <div className="dm-stat">
-              <div className="dm-head">Links</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                {graph.stats.links}
-              </div>
+            <div className="v-stat">
+              <div className="v-stat-label">Links</div>
+              <div className="v-stat-value">{graph.stats.links}</div>
             </div>
-            <div className="dm-stat" style={{
+            <div className="v-stat" style={{
               borderColor: graph.stats.unmapped_credentials
                 ? 'rgba(245,158,11,.4)' : undefined }}>
-              <div className="dm-head">Unmapped</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 600,
-                color: graph.stats.unmapped_credentials ? '#f59e0b' : 'inherit' }}>
+              <div className="v-stat-label">Unmapped</div>
+              <div className="v-stat-value"
+                style={{ color: graph.stats.unmapped_credentials ? '#fbbf24' : 'inherit' }}>
                 {graph.stats.unmapped_credentials}
               </div>
             </div>
           </div>
 
           {graph.stats.unmapped_credentials > 0 && (
-            <div style={{ padding: '.6rem .8rem', borderRadius: 8,
-              marginBottom: '1rem', background: 'rgba(245,158,11,.1)',
-              fontSize: '.83rem' }}>
-              <Unlink size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-              {graph.stats.unmapped_credentials} credential
-              {graph.stats.unmapped_credentials === 1 ? ' has' : 's have'} no
-              recorded dependencies. An unmapped credential is not a safe one —
-              it is one whose blast radius is unknown.
+            <div className="v-banner warn">
+              <Unlink size={14} />
+              <span>
+                {graph.stats.unmapped_credentials} credential
+                {graph.stats.unmapped_credentials === 1 ? ' has' : 's have'} no
+                recorded dependencies. An unmapped credential is not a safe one —
+                it is one whose blast radius is unknown.
+              </span>
             </div>
           )}
 
@@ -143,8 +131,13 @@ export default function DependencyMap() {
               <Network size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
               Credentials → Systems
             </h4>
-            <p style={{ fontSize: '.78rem', opacity: .65, marginTop: 0 }}>
+            <p style={{ fontSize: '.78rem', color: 'var(--text3)', marginTop: 0 }}>
               Hover anything to isolate what it touches.
+              {/* The graph is not scaled to fit narrow screens on purpose: at
+                  phone width the labels would shrink to around six pixels and
+                  the map would be decorative rather than readable. It scrolls
+                  sideways instead, and says so. */}
+              <span className="v-scroll-hint"> Scroll sideways to see the full map.</span>
             </p>
 
             <svg width={RIGHT_X + NODE_W + 40} height={height}
@@ -206,8 +199,13 @@ export default function DependencyMap() {
             </svg>
 
             {graph.credentials.length === 0 && (
-              <div style={{ padding: '1.5rem', opacity: .6, fontSize: '.85rem' }}>
-                No credentials yet.
+              <div className="v-empty">
+                <div className="v-empty-icon"><Network size={22} strokeWidth={1.5} /></div>
+                <div className="v-empty-title">Nothing mapped yet</div>
+                <p className="v-empty-body">
+                  Once credentials are linked to the systems that use them, this
+                  map shows what a rotation would break before you rotate it.
+                </p>
               </div>
             )}
           </div>

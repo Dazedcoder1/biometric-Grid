@@ -35,7 +35,7 @@ const Employees = () => {
     } catch (err) {
       console.error('Fetch error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load employees');
+      setError(err?.message || 'Failed to load employees');
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ const Employees = () => {
       setShowDetailModal(true);
     } catch (err) {
       console.error('Fetch employee details error:', err);
-      setError('Failed to load employee details');
+      setError(err?.message || 'Failed to load employee details');
     }
   };
 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
-import { orgApi, tenantApi } from '../../services/api';
+import { orgApi, commonApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Search, RefreshCw, AlertCircle, Calendar, User, Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -42,7 +42,7 @@ const Attendance = () => {
       }
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      setError("Failed to load attendance");
+      setError(err?.message || "Failed to load attendance");
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ const Attendance = () => {
   const fetchSettings = async () => {
     try {
       // Fetch tenant settings using public endpoint or org API
-      const data = await tenantApi.getSettings();
+      const data = await commonApi.getSettings();
       setSettings(data);
     } catch (err) {
       console.error("Fetch settings error:", err);

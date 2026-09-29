@@ -127,13 +127,63 @@ def test_only_super_admin_grants_all():
     assert granting == ["super_admin"]
 
 
-def test_tenant_admin_cannot_reveal():
-    """A long-lived API key with no second factor must not decrypt secrets.
-
-    ARCHITECTURE.md §5. Tenant Admin authenticates by API key, which has no
-    user identity to step up. Managing credentials is fine; reading them is not.
+def test_reveal_is_gated_by_step_up_not_by_role():
     """
-    assert "credential.reveal" not in SYSTEM_ROLES["tenant_admin"]["permissions"]
+    This replaces an earlier assertion that Tenant Admin must NOT hold
+    credential.reveal. That rule existed because the only way to be a Tenant
+    Admin was a long-lived API key: no user identity to name in the audit log,
+    and nothing that could enrol a second factor. Tenant Admins now sign in
+    with a password and enrol an authenticator, so the premise is gone.
+
+    What still protects secrets is the mechanism, not the role list: reveal
+    requires a fresh step-up assertion bound to a user and a session, which an
+    API-key caller cannot produce. Asserting that here rather than re-asserting
+    a role's contents keeps the test pointed at the control that does the work.
+    """
+    assert "credential.reveal" in STEP_UP_REQUIRED
+
+    revealing = [
+        code for code, spec in SYSTEM_ROLES.items()
+        if not spec["grants_all"] and "credential.reveal" in spec["permissions"]
+    ]
+    assert revealing, "no role can reveal a secret — the vault would be write-only"
+    for code in revealing:
+        assert code != "super_admin"
+
+
+def test_audit_verify_is_operator_only():
+    """
+    verify_chain walks the whole chain across every tenant, so its result
+    discloses the volume and head hash of other organisations' activity. Until
+    the pass can be scoped per tenant, no tenant-level role may run it.
+
+    If this fails because verification became tenant-scoped, grant the
+    permission and delete this test — do not widen it to allow the leak.
+    """
+    for code, spec in SYSTEM_ROLES.items():
+        if spec["grants_all"]:
+            continue
+        assert "audit.verify" not in spec["permissions"], (
+            f"{code} can verify the global hash chain, which spans tenants"
+        )
+
+
+def test_roles_that_can_act_can_also_read_the_record():
+    """
+    A role able to reveal secrets or grant access should be able to read the
+    log of those actions. Org Admin held credential.reveal and share.grant but
+    not audit.view, so the sidebar linked it to a page where every request
+    returned 403 — and, worse, it could take the actions without being able to
+    see them recorded.
+    """
+    for code, spec in SYSTEM_ROLES.items():
+        if spec["grants_all"]:
+            continue
+        perms = set(spec["permissions"])
+        if perms & {"credential.reveal", "share.grant"} and "rack.manage" in perms:
+            assert "audit.view" in perms, (
+                f"{code} can reveal or share but cannot read the audit log"
+            )
 
 
 def test_employee_cannot_manage_roles():

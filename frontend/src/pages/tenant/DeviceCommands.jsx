@@ -35,7 +35,7 @@ const DeviceCommands = () => {
     } catch (err) {
       console.error('Fetch error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load data');
+      setError(err?.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -300,7 +300,8 @@ const DeviceCommands = () => {
           <ClipboardList size={14} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 6, opacity: 0.8 }} />
           Instructions
         </h4>
-        <ul style={{ color: 'var(--text3)', fontSize: '0.8rem', marginLeft: '1rem', lineHeight: '1.6' }}>
+        {/* marginLeft dropped: ul/ol now carry their own indent in index.css. */}
+        <ul style={{ color: 'var(--text3)', fontSize: '0.8rem', lineHeight: '1.6' }}>
           <li><strong>Enroll:</strong> Sends command to device to capture employee's fingerprint. Employee must scan finger on device after command is sent.</li>
           <li><strong>Delete:</strong> Removes fingerprint from device. Employee will no longer be able to mark attendance on that device.</li>
           <li>Commands are queued if device is offline and will execute when device reconnects.</li>

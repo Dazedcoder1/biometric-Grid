@@ -38,7 +38,7 @@ const Departments = () => {
     } catch (err) {
       console.error('Fetch departments error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load departments');
+      setError(err?.message || 'Failed to load departments');
     } finally {
       setLoading(false);
     }

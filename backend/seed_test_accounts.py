@@ -208,15 +208,19 @@ async def main():
 TEST CREDENTIALS
 {'=' * 64}
 
-  TENANT ADMIN        http://localhost:5173/login/tenant
-    API Key           {TENANT_API_KEY}
-    (no password — this role authenticates by key)
+  Everyone signs in at  http://localhost:5173/login
+  There is no role to pick — the server works out what each account is.
 
-  ORG ADMIN           http://localhost:5173/login/org
+  TENANT ADMIN
+    API Key           {TENANT_API_KEY}
+    (no password — this role authenticates by key; paste the key into the
+     password field, with anything in the first field)
+
+  ORG ADMIN
     Email             {ORG_ADMIN_EMAIL}
     Password          {ORG_ADMIN_PASSWORD}
 
-  EMPLOYEES ({len(EMPLOYEES)})       http://localhost:5173/login/employee
+  EMPLOYEES ({len(EMPLOYEES)})
     Password          {EMPLOYEE_PASSWORD}   (same for all five)
     Sign in with either the email or the employee code.
 

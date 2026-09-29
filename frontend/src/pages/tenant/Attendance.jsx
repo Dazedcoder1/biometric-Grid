@@ -55,7 +55,7 @@ const Attendance = () => {
     } catch (err) {
       console.error('Fetch attendance error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load attendance');
+      setError(err?.message || 'Failed to load attendance');
     } finally {
       setLoading(false);
     }

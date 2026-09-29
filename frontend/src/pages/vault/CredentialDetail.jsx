@@ -10,16 +10,19 @@
 // exactly the shape this needs.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
-  AlertCircle, ArrowLeft, Clock, Share2, ShieldOff, UserPlus, X,
+  AlertCircle, ArrowLeft, CheckCircle, Clock, Share2, ShieldOff, UserPlus, Users,
 } from 'lucide-react';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useAuth } from '../../context/AuthContext';
+import usePermissions from '../../hooks/usePermissions';
 import { vaultApi } from '../../services/api';
 import { sidebarPropsFor } from '../../utils/sidebarRole';
+import VaultModal from '../../components/VaultModal';
+import './vault.css';
 
 const LEVELS = ['view', 'reveal', 'edit', 'reshare', 'manage'];
 
@@ -33,6 +36,7 @@ const STATUS_TONE = {
 export default function CredentialDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { can } = usePermissions();
   const [tree, setTree] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [error, setError] = useState('');
@@ -76,45 +80,21 @@ export default function CredentialDetail() {
 
   return (
     <DashboardLayout title="Credential" {...sidebarPropsFor(user)}>
-      <style>{`
-        .cd-node { display:flex; align-items:center; gap:.75rem;
-          padding:.6rem .8rem; border-radius:8px; }
-        .cd-node:hover { background:var(--bg3); }
-        .cd-dot { width:8px; height:8px; border-radius:50%; flex:none; }
-        .cd-rail { border-left:1px dashed var(--border); margin-left:.45rem;
-          padding-left:1rem; }
-        .cd-btn { background:var(--bg3); border:1px solid var(--border);
-          border-radius:8px; padding:.35rem .6rem; cursor:pointer;
-          color:var(--text2); font-size:.78rem; display:inline-flex;
-          align-items:center; gap:.35rem; }
-        .cd-btn:hover { background:var(--bg4); color:var(--text); }
-        .cd-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8);
-          backdrop-filter:blur(6px); display:flex; align-items:center;
-          justify-content:center; z-index:9999; }
-        .cd-modal { background:var(--bg2); border:1px solid var(--border);
-          border-radius:18px; width:min(440px,92vw); padding:1.5rem;
-          position:relative; }
-        .cd-event { display:flex; gap:.75rem; padding:.55rem 0;
-          border-top:1px solid var(--border); font-size:.84rem; }
-      `}</style>
-
-      <a href="/vault" className="cd-btn" style={{ marginBottom: '1rem' }}>
+      {/* Link, not <a href>: an anchor reloads the whole app and re-runs auth
+          just to go back one screen. */}
+      <Link to="/vault" className="v-btn"
+        style={{ marginBottom: '1rem', display: 'inline-flex' }}>
         <ArrowLeft size={13} /> Back to vault
-      </a>
+      </Link>
 
       {flash && (
-        <div style={{ padding: '.6rem .8rem', borderRadius: 8, marginBottom: '1rem',
-          background: 'rgba(34,197,94,.12)', fontSize: '.85rem' }}>{flash}</div>
+        <div className="v-banner ok"><CheckCircle size={14} /><span>{flash}</span></div>
       )}
       {error && (
-        <div style={{ padding: '.6rem .8rem', borderRadius: 8, marginBottom: '1rem',
-          background: 'rgba(239,68,68,.12)', fontSize: '.85rem' }}>
-          <AlertCircle size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-          {error}
-        </div>
+        <div className="v-banner bad"><AlertCircle size={14} /><span>{error}</span></div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+      <div className="v-split">
         {/* ─── sharing tree ─────────────────────────────────────────── */}
         <div className="card-box">
           <div style={{ display: 'flex', justifyContent: 'space-between',
@@ -123,32 +103,46 @@ export default function CredentialDetail() {
               <Share2 size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
               Who has access
             </h4>
-            <button className="cd-btn" onClick={() => setShowShare(true)}>
-              <UserPlus size={13} /> Share
-            </button>
+            {/* share.view opens this page; share.grant is what the button
+                actually needs. They are separate permissions and an Employee
+                holds only the first. */}
+            {can('share.grant') && (
+              <button type="button" className="v-btn" onClick={() => setShowShare(true)}>
+                <UserPlus size={13} /> Share
+              </button>
+            )}
           </div>
 
           {tree.length === 0 ? (
-            <div style={{ opacity: .6, fontSize: '.85rem', padding: '1rem 0' }}>
-              Not shared with anyone. Only you can see this.
+            <div className="v-empty" style={{ padding: '2rem 1rem' }}>
+              <div className="v-empty-icon"><Users size={22} strokeWidth={1.5} /></div>
+              <div className="v-empty-title">Not shared with anyone</div>
+              <p className="v-empty-body">
+                Only you can see this credential. Sharing grants a specific level
+                — view, reveal, edit, reshare or manage — and can be time-limited.
+              </p>
             </div>
           ) : (
             tree.map((node) => (
-              <div key={node.id} style={{ marginLeft: node.depth * 18 }}>
-                <div className={node.depth > 0 ? 'cd-rail' : ''}>
-                  <div className="cd-node">
-                    <span className="cd-dot"
-                      style={{ background: STATUS_TONE[node.status] }} />
+              // Indent is capped at four levels. Past that a reshared credential
+              // walks its own tree off the right edge on a narrow screen, and
+              // the connector rails already show the nesting.
+              <div key={node.id} style={{ marginLeft: Math.min(node.depth, 4) * 18 }}>
+                <div className={node.depth > 0 ? 'v-rail' : ''}>
+                  <div className="v-node">
+                    <span className="v-dot"
+                      style={{ background: STATUS_TONE[node.status] }}
+                      title={node.status} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '.85rem' }}>
                         {node.grantee_user_id
                           ? `User #${node.grantee_user_id}`
                           : `Team #${node.grantee_team_id}`}
-                        <span style={{ opacity: .6, marginLeft: 6 }}>
-                          · {node.permission}
+                        <span className="v-chip" style={{ marginLeft: 6 }}>
+                          {node.permission}
                         </span>
                       </div>
-                      <div style={{ fontSize: '.72rem', opacity: .6 }}>
+                      <div style={{ fontSize: '.72rem', color: 'var(--text3)' }}>
                         {node.depth > 0 && `via user #${node.grantor_id} · `}
                         {node.status}
                         {node.expires_at &&
@@ -156,8 +150,10 @@ export default function CredentialDetail() {
                         {node.revoked_reason && ` · ${node.revoked_reason}`}
                       </div>
                     </div>
-                    {['active', 'pending'].includes(node.status) && (
-                      <button className="cd-btn" onClick={() => setRevokeTarget(node)}>
+                    {can('share.revoke') && ['active', 'pending'].includes(node.status) && (
+                      <button type="button" className="v-btn danger"
+                        title="Revoke access" aria-label="Revoke access"
+                        onClick={() => setRevokeTarget(node)}>
                         <ShieldOff size={12} />
                       </button>
                     )}
@@ -176,10 +172,16 @@ export default function CredentialDetail() {
           </h4>
 
           {timeline.length === 0 ? (
-            <div style={{ opacity: .6, fontSize: '.85rem' }}>Nothing recorded yet.</div>
+            <div className="v-empty" style={{ padding: '2rem 1rem' }}>
+              <div className="v-empty-icon"><Clock size={22} strokeWidth={1.5} /></div>
+              <div className="v-empty-title">Nothing recorded yet</div>
+              <p className="v-empty-body">
+                Views, reveals, shares and rotations appear here as they happen.
+              </p>
+            </div>
           ) : (
             timeline.map((e) => (
-              <div key={e.seq} className="cd-event">
+              <div key={e.seq} className="v-event">
                 <div style={{ flex: 1 }}>
                   <div>
                     <strong>
@@ -263,47 +265,43 @@ function ShareModal({ credentialId, onClose, onShared, onError }) {
   };
 
   return (
-    <div className="cd-overlay">
-      <form className="cd-modal" onSubmit={submit}>
-        <button type="button" onClick={onClose} style={{ position: 'absolute',
-          top: 14, right: 14, background: 'none', border: 'none',
-          color: 'var(--text3)', cursor: 'pointer' }}>
-          <X size={18} />
-        </button>
-        <h3 style={{ marginTop: 0, fontSize: '1.05rem' }}>Share credential</h3>
-
-        <label className="form-label">User ID</label>
-        <input className="form-input" required type="number"
+    <VaultModal title="Share credential" onClose={onClose}>
+      <form onSubmit={submit} style={{ marginTop: '.8rem' }}>
+        <label className="form-label" htmlFor="s-user"
+          style={{ display: 'block' }}>User ID</label>
+        <input id="s-user" className="form-input" required type="number"
           value={form.grantee_user_id}
           onChange={(e) => setForm({ ...form, grantee_user_id: e.target.value })}
           style={{ width: '100%', marginBottom: '.7rem' }} />
 
-        <label className="form-label">Permission</label>
-        <select className="form-input" value={form.permission}
+        <label className="form-label" htmlFor="s-perm"
+          style={{ display: 'block' }}>Permission</label>
+        <select id="s-perm" className="form-input form-select" value={form.permission}
           onChange={(e) => setForm({ ...form, permission: e.target.value })}
           style={{ width: '100%', marginBottom: '.4rem' }}>
           {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
-        <div style={{ fontSize: '.72rem', opacity: .65, marginBottom: '.7rem' }}>
-          You cannot grant more than you hold. `reveal` lets them see the secret;
-          `view` shows only that it exists.
+        <div style={{ fontSize: '.72rem', color: 'var(--text3)', marginBottom: '.7rem',
+          lineHeight: 1.5 }}>
+          You cannot grant more than you hold. <code>reveal</code> lets them see
+          the secret; <code>view</code> shows only that it exists.
         </div>
 
-        <label className="form-label">Expires (optional)</label>
-        <input className="form-input" type="datetime-local" value={form.expires_at}
+        <label className="form-label" htmlFor="s-exp"
+          style={{ display: 'block' }}>Expires (optional)</label>
+        <input id="s-exp" className="form-input" type="datetime-local"
+          value={form.expires_at}
           onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
           style={{ width: '100%' }} />
-        <div style={{ fontSize: '.72rem', opacity: .65, marginTop: '.3rem' }}>
+        <div style={{ fontSize: '.72rem', color: 'var(--text3)', marginTop: '.3rem' }}>
           Leave blank for access that does not expire.
         </div>
 
-        <button type="submit" disabled={busy || !form.grantee_user_id}
-          style={{ width: '100%', marginTop: '1rem', padding: '.7rem',
-            borderRadius: 10, border: 'none', background: 'var(--teal)',
-            color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+        <button type="submit" className="v-btn-primary"
+          disabled={busy || !form.grantee_user_id}>
           {busy ? 'Sharing…' : 'Share'}
         </button>
       </form>
-    </div>
+    </VaultModal>
   );
 }

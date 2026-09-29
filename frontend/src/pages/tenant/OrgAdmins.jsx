@@ -44,7 +44,7 @@ const OrgAdmins = () => {
     } catch (err) {
       console.error('Fetch error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load data');
+      setError(err?.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }

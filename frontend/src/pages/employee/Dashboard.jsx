@@ -4,7 +4,7 @@ import DashboardLayout from '../../layouts/DashboardLayout';
 import { TrendChart } from '../../components/Charts';
 import OfficeHoursFacts from '../../components/OfficeHoursFacts';
 import { Check, Info, X } from 'lucide-react';
-import { employeeApi, publicApi } from '../../services/api';
+import { commonApi, employeeApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 const Dashboard = () => {
@@ -52,29 +52,27 @@ const Dashboard = () => {
     fetchAllData();
   }, []);
 
+  // No tenant id needed any more: the server reads it from the token, which
+  // also removes the branch that silently used defaults whenever the decoded
+  // token happened not to carry one.
+  //
+  // The old call went to /api/tenant/settings/public, a route that was never
+  // written. It 404'd on every load and landed in the catch below, so this
+  // screen has always shown hardcoded office hours while looking as though it
+  // had fetched them.
   const fetchSettings = async () => {
     try {
-      const tenantId = user?.tenant_id;
-      if (!tenantId) {
-        console.warn("No tenant_id found, using default settings");
-        setSettings({
-          office_start_time: "09:00:00",
-          office_end_time: "18:00:00",
-          late_threshold_minutes: 15,
-          min_working_hours: 9.0,
-        });
-        return;
-      }
-      
-      const data = await publicApi.getTenantSettings(tenantId);
-      setSettings(data);
+      setSettings(await commonApi.getSettings());
     } catch (err) {
-      console.error("Failed to fetch settings:", err);
+      console.error('Failed to fetch settings:', err);
+      // Still a fallback, but now only for a genuine outage — and it says so
+      // on screen rather than pretending these are the configured hours.
       setSettings({
-        office_start_time: "09:00:00",
-        office_end_time: "18:00:00",
+        office_start_time: '09:00:00',
+        office_end_time: '18:00:00',
         late_threshold_minutes: 15,
         min_working_hours: 9.0,
+        is_default: true,
       });
     }
   };

@@ -668,7 +668,7 @@ const Devices = () => {
     } catch (err) {
       console.error('Fetch devices error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load devices');
+      setError(err?.message || 'Failed to load devices');
     } finally {
       setLoading(false);
     }

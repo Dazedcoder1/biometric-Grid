@@ -110,13 +110,26 @@ from app.api.routes.org_admin.employees  import router as org_emp_router
 from app.api.routes.org_admin.attendance import router as org_att_router
 from app.api.routes.org_admin.leaves     import router as org_leave_router
 from app.api.routes.org_admin.holidays   import router as org_holiday_router
+from app.api.routes.org_admin.devices    import router as org_devices_router
+from app.api.routes.org_admin.activity   import router as org_activity_router
 
 ORG_PREFIX = "/api/org"
-app.include_router(org_dash_router,    prefix=ORG_PREFIX, tags=["Org Admin"])
-app.include_router(org_emp_router,     prefix=ORG_PREFIX, tags=["Org Admin"])
-app.include_router(org_att_router,     prefix=ORG_PREFIX, tags=["Org Admin"])
-app.include_router(org_leave_router,   prefix=ORG_PREFIX, tags=["Org Admin"])
-app.include_router(org_holiday_router, prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_dash_router,     prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_emp_router,      prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_att_router,      prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_leave_router,    prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_holiday_router,  prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_devices_router,  prefix=ORG_PREFIX, tags=["Org Admin"])
+app.include_router(org_activity_router, prefix=ORG_PREFIX, tags=["Org Admin"])
+
+# ─── Shared by every signed-in role ───────────────────────────────────────────
+# Office hours are one tenant-wide fact that attendance screens for all three
+# roles need. It used to live only under /api/tenant, which rejects anyone who
+# is not a Tenant Admin — so org and employee pages silently fell back to
+# hardcoded defaults. See routes/common/settings.py.
+from app.api.routes.common.settings import router as common_settings_router
+
+app.include_router(common_settings_router, prefix="/api", tags=["Shared"])
 
 # ─── Employee (uses JWT Bearer) ───────────────────────────────────────────────
 from app.api.routes.employee.dashboard      import router as emp_dash_router

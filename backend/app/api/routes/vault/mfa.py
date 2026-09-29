@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps_security import SecurityContext, get_security_context
 from app.core import audit, mfa
+from app.core.permissions import STEP_UP_REQUIRED
 from app.db.session import get_db
 
 router = APIRouter()
@@ -29,6 +30,34 @@ class CodeIn(BaseModel):
 
 class StepUpIn(CodeIn):
     purpose: str = Field("credential.reveal", max_length=96)
+
+
+@router.get("/me/permissions")
+async def my_permissions(
+    ctx: SecurityContext = Depends(get_security_context),
+):
+    """
+    What this caller is allowed to do.
+
+    Exists so the interface can stop offering actions that will be refused.
+    Without it the frontend had to guess, and guessed wrong: the audit log
+    showed a "Verify chain" button to everyone who could open the page, but
+    running it needs `audit.verify`, which only a Super Admin holds. A Tenant
+    Admin clicked it and got a permission error for something they were never
+    able to do.
+
+    This is a convenience for rendering, not a control. Every route still
+    checks its own permission server-side — a client that ignores this list
+    gets a 403, exactly as before.
+    """
+    return {
+        "permissions": ctx.permissions.as_list(),
+        "grants_all": ctx.permissions.grants_all,
+        "roles": list(ctx.permissions.role_codes),
+        # Codes whose use additionally needs a fresh MFA assertion, so the UI
+        # can warn before starting something that will interrupt for a code.
+        "step_up_required": sorted(STEP_UP_REQUIRED),
+    }
 
 
 @router.get("/mfa/status")

@@ -36,7 +36,7 @@ const Holidays = () => {
     } catch (err) {
       console.error('Fetch holidays error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load holidays');
+      setError(err?.message || 'Failed to load holidays');
     } finally {
       setLoading(false);
     }

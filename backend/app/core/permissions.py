@@ -92,11 +92,25 @@ SYSTEM_ROLES: dict[str, dict] = {
             "vault.view", "vault.manage",
             "rack.view", "rack.manage",
             "credential.view", "credential.create", "credential.edit", "credential.delete",
+            "credential.reveal",
             "share.view", "share.grant", "share.revoke",
             "audit.view",
-            # Deliberately NOT credential.reveal. A Tenant Admin authenticating
-            # by long-lived API key has no user identity and no second factor;
-            # see ARCHITECTURE.md §5. Reveal is granted to people, not keys.
+            # credential.reveal was withheld here while the only way to be a
+            # Tenant Admin was a long-lived API key: a key carries a tenant and
+            # not a person, so the audit log could not name who held it, and a
+            # key cannot enrol a second factor. Both premises are gone — Tenant
+            # Admins sign in with a password, appear in the audit log by name,
+            # and enrol an authenticator like anyone else.
+            #
+            # The key path is still barred, but by mechanism rather than by
+            # this list: reveal requires a fresh step-up assertion bound to a
+            # user and a session, and an API-key caller can produce neither.
+            # See ARCHITECTURE.md §5 and app/core/mfa.py.
+            #
+            # NOT granted: audit.verify. That walks the whole chain across
+            # every tenant, so its result would disclose the volume and head
+            # hash of other organisations' activity. It stays with the platform
+            # operator until the verification pass can be scoped per tenant.
         ),
     },
     "org_admin": {
@@ -108,6 +122,12 @@ SYSTEM_ROLES: dict[str, dict] = {
             "credential.view", "credential.create", "credential.edit",
             "credential.reveal",
             "share.view", "share.grant", "share.revoke",
+            # The audit log is scoped to the caller's tenant, so this shows an
+            # Org Admin their own organisation and nothing else. Withholding it
+            # while granting credential.reveal and share.grant was incoherent:
+            # they could already take the actions the log records, but not read
+            # the record of them.
+            "audit.view",
         ),
     },
     "employee": {

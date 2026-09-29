@@ -249,7 +249,7 @@ const ReportAtt = () => {
     }).catch(err => {
       console.error("PDF generation error:", err);
       document.body.removeChild(pdfContent);
-      setError("Failed to generate PDF");
+      setError(err?.message || "Failed to generate PDF");
     });
   };
 

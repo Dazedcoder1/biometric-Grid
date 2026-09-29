@@ -53,7 +53,7 @@ const ReportLeave = () => {
       setGenerated(true);
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      setError("Failed to generate report");
+      setError(err?.message || "Failed to generate report");
     } finally {
       setLoading(false);
     }

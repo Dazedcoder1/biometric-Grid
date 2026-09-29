@@ -17,6 +17,32 @@ const getAuthType = () => localStorage.getItem('auth_type');
 // Every other route uses a JWT.
 const TENANT_PREFIX = '/api/tenant/';
 
+// The organisation a Super Admin is currently administering.
+//
+// Kept in localStorage rather than in the URL: it is a property of the session,
+// not of the page, and every Tenant Admin screen would otherwise need to carry
+// it through every link and redirect. It is a convenience for the client only
+// — the server re-checks on every request that the caller is actually a Super
+// Admin before honouring it.
+const ACTING_TENANT_KEY = 'acting_tenant_id';
+
+export const getActingTenantId = () => localStorage.getItem(ACTING_TENANT_KEY);
+
+export const setActingTenant = (tenant) => {
+  if (tenant?.id == null) localStorage.removeItem(ACTING_TENANT_KEY);
+  else {
+    localStorage.setItem(ACTING_TENANT_KEY, String(tenant.id));
+    localStorage.setItem('acting_tenant_name', tenant.name || '');
+  }
+};
+
+export const getActingTenantName = () => localStorage.getItem('acting_tenant_name');
+
+export const clearActingTenant = () => {
+  localStorage.removeItem(ACTING_TENANT_KEY);
+  localStorage.removeItem('acting_tenant_name');
+};
+
 /**
  * Choose the credential from the ENDPOINT, not from a global `auth_type` flag.
  *
@@ -43,6 +69,14 @@ function pickAuthHeaders(endpoint) {
     // 422; now it is a 401 with a sentence explaining itself.
     if (apiKey) headers['X-API-Key'] = apiKey;
     else if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // Which organisation a Super Admin is acting within. They have no tenant of
+    // their own, so every route here needs to be told. The backend honours this
+    // only for super_admin and refuses it from anyone else, so sending it
+    // unconditionally is safe — a tenant admin with a stale value gets a clear
+    // 403 rather than silently acting on the wrong organisation.
+    const acting = getActingTenantId();
+    if (acting) headers['X-Acting-Tenant-Id'] = acting;
     return headers;
   }
 
@@ -72,6 +106,11 @@ async function apiRequest(endpoint, options = {}) {
     // flow needs to distinguish "re-authenticate" from a general 401.
     err.status = response.status;
     err.stepUpRequired = response.headers.get('X-Step-Up-Required');
+    // A Super Admin with no organisation selected. Not a failure to show as an
+    // error — the caller turns it into the organisation chooser.
+    err.needsTenantChoice = (
+      response.status === 409 && endpoint.startsWith(TENANT_PREFIX)
+    );
     throw err;
   }
 
@@ -113,7 +152,6 @@ export const employeeApi = {
   getDashboard: () => apiRequest('/api/employee/dashboard'),
   getTodayAttendance: () => apiRequest('/api/employee/attendance/today'),
   getAttendanceHistory: () => apiRequest('/api/employee/attendance'),
-  getAttendanceStats: () => apiRequest('/api/employee/attendance/stats'),
   getMonthlyStats: (month, year) => {
     const params = new URLSearchParams();
     if (month) params.append('month', month);
@@ -132,17 +170,13 @@ export const employeeApi = {
     if (year) params.append('year', year);
     return apiRequest(`/api/employee/attendance/calendar?${params.toString()}`);
   },
-  getByDate: (date) => apiRequest(`/api/employee/attendance/${date}`),
-  exportData: () => apiRequest('/api/employee/attendance/export'),
   getProfile: () => apiRequest('/api/employee/profile'),
   updateProfile: (data) => apiRequest('/api/employee/profile', { method: 'PUT', body: JSON.stringify(data) }),
   changePassword: (data) => apiRequest('/api/employee/profile/change-password', { method: 'PUT', body: JSON.stringify(data) }),
-  getAttendanceSummary: () => apiRequest('/api/employee/profile/attendance-summary'),
   getLeaves: () => apiRequest('/api/employee/leaves'),
   getLeaveBalance: () => apiRequest('/api/employee/leaves/balance'),
   getLeaveStats: () => apiRequest('/api/employee/leaves/stats'),
   applyLeave: (data) => apiRequest('/api/employee/leaves', { method: 'POST', body: JSON.stringify(data) }),
-  getLeaveDetail: (id) => apiRequest(`/api/employee/leaves/${id}`),
   cancelLeave: (id) => apiRequest(`/api/employee/leaves/${id}/cancel`, { method: 'PATCH' }),
   getHolidays: () => apiRequest('/api/employee/holidays'),
   getUpcomingHoliday: () => apiRequest('/api/employee/holidays/upcoming'),
@@ -166,7 +200,6 @@ export const orgApi = {
   updateEmployee: (id, data) => apiRequest(`/api/org/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteEmployee: (id) => apiRequest(`/api/org/employees/${id}`, { method: 'DELETE' }),
   assignFingerprint: (id, data) => apiRequest(`/api/org/employees/${id}/assign-fingerprint`, { method: 'PATCH', body: JSON.stringify(data) }),
-  getAttendance: (date) => apiRequest(`/api/org/attendance?date=${date}`),
   getTodayAttendance: () => apiRequest('/api/org/attendance/today'),
   getAttendanceByDate: (date) => apiRequest(`/api/org/attendance/date/${date}`),
   getLeaveRequests: () => apiRequest('/api/org/leaves'),
@@ -180,9 +213,24 @@ export const orgApi = {
   createDevice: (data) => apiRequest('/api/org/devices', { method: 'POST', body: JSON.stringify(data) }),
   fireCommand: (data) => apiRequest('/api/org/devices/fire-command', { method: 'POST', body: JSON.stringify(data) }),
   getActivityLog: () => apiRequest('/api/org/activity'),
-  getSettings: () => apiRequest('/api/org/settings'),
-  updateSettings: (data) => apiRequest('/api/org/settings', { method: 'PUT', body: JSON.stringify(data) }),
 };
+
+// ==================== SHARED BY EVERY SIGNED-IN ROLE ====================
+//
+// Office hours are one tenant-wide fact that the attendance screens for all
+// three roles need. They used to be read from /api/tenant/settings, which
+// answers anyone who is not a Tenant Admin with a 403 — so the Org Admin and
+// employee pages caught the error and fell back to their own hardcoded values.
+// The numbers looked authoritative and were not coming from the database.
+export const commonApi = {
+  getSettings: () => apiRequest('/api/settings'),
+};
+
+// Removed as dead: getActivityLog, getRecentAttendance, getAttendanceStats,
+// getPendingLeaves, findEmployeeByFingerprint, getDepartmentSummary,
+// updateDepartmentStatus (tenant) and exportData, getByDate, getLeaveDetail,
+// getAttendanceSummary (employee). No page called any of them and none had a
+// backend route — see backend/tests/test_api_contract.py.
 
 // ==================== TENANT ADMIN APIs ====================
 export const tenantApi = {
@@ -191,8 +239,6 @@ export const tenantApi = {
     method: 'POST', 
     body: JSON.stringify({ api_key: apiKey }) 
   }),
-  getRecentAttendance: () => apiRequest('/api/tenant/attendance/recent'),
-  getAttendanceStats: () => apiRequest('/api/tenant/attendance/stats'),
   getAttendanceByDate: (date, deptId) => {
     const params = deptId ? `?dept_id=${deptId}` : '';
     return apiRequest(`/api/tenant/attendance/date/${date}${params}`);
@@ -204,16 +250,9 @@ export const tenantApi = {
     if (deptId) params.append('dept_id', deptId);
     return apiRequest(`/api/tenant/reports/attendance?${params.toString()}`);
   },
-  getDepartmentSummary: (month, year) => {
-    const params = new URLSearchParams();
-    if (month) params.append('month', month);
-    if (year) params.append('year', year);
-    return apiRequest(`/api/tenant/reports/department-summary?${params.toString()}`);
-  },
   getDepartments: () => apiRequest('/api/tenant/departments'),
   createDepartment: (data) => apiRequest('/api/tenant/departments', { method: 'POST', body: JSON.stringify(data) }),
   updateDepartment: (id, data) => apiRequest(`/api/tenant/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateDepartmentStatus: (id, data) => apiRequest(`/api/tenant/departments/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteDepartment: (id) => apiRequest(`/api/tenant/departments/${id}`, { method: 'DELETE' }),
   getHolidays: (year) => {
     const params = year ? `?year=${year}` : '';
@@ -242,7 +281,6 @@ export const tenantApi = {
     if (deptId) params.append('dept_id', deptId);
     return apiRequest(`/api/tenant/leaves?${params.toString()}`);
   },
-  getPendingLeaves: () => apiRequest('/api/tenant/leaves/pending'),
   approveLeave: (id) => apiRequest(`/api/tenant/leaves/${id}/approve`, { method: 'PATCH' }),
   rejectLeave: (id, reason) => {
     const body = reason ? JSON.stringify({ reason }) : '{}';
@@ -259,11 +297,9 @@ export const tenantApi = {
     if (year) params.append('year', year);
     return apiRequest(`/api/tenant/employees/${id}/attendance?${params.toString()}`);
   },
-  findEmployeeByFingerprint: (fingerId) => apiRequest(`/api/tenant/employees/fingerprint/${fingerId}`),
   getSettings: () => apiRequest('/api/tenant/settings'),
   updateSettings: (data) => apiRequest('/api/tenant/settings', { method: 'PUT', body: JSON.stringify(data) }),
   getTenantProfile: () => apiRequest('/api/tenant/profile'),
-  getActivityLog: () => apiRequest('/api/tenant/activity'),
 };
 
 // ==================== SUPER ADMIN APIs ====================
@@ -346,6 +382,9 @@ export const authApi = {
 // header stays out of any JSON request logging.
 
 export const vaultApi = {
+  // What this caller may do, so the UI stops offering actions that 403.
+  myPermissions: () => apiRequest('/api/vault/me/permissions'),
+
   // MFA
   mfaStatus: () => apiRequest('/api/vault/mfa/status'),
   // Returns { secret, provisioning_uri }. The URI is the otpauth:// string
@@ -375,10 +414,11 @@ export const vaultApi = {
     }),
 
   // Credentials
-  list: ({ rackId, search } = {}) => {
+  list: ({ rackId, search, limit } = {}) => {
     const q = new URLSearchParams();
     if (rackId) q.set('rack_id', rackId);
     if (search) q.set('search', search);
+    if (limit) q.set('limit', limit);
     const qs = q.toString();
     return apiRequest(`/api/vault/credentials${qs ? `?${qs}` : ''}`);
   },
@@ -498,31 +538,11 @@ export const vaultApi = {
   },
 };
 
-export const publicApi = {
-  getTenantSettings: (tenantId) => {
-    return fetch(`${API_BASE_URL}/api/tenant/settings/public?tenant_id=${tenantId}`)
-      .then(async (response) => {
-        if (!response.ok) {
-          console.warn(`Failed to fetch settings for tenant ${tenantId}, using defaults`);
-          return {
-            office_start_time: "09:00:00",
-            office_end_time: "18:00:00",
-            late_threshold_minutes: 15,
-            min_working_hours: 9.0,
-            working_days: "1,2,3,4,5"
-          };
-        }
-        return response.json();
-      })
-      .catch(() => ({
-        office_start_time: "09:00:00",
-        office_end_time: "18:00:00",
-        late_threshold_minutes: 15,
-        min_working_hours: 9.0,
-        working_days: "1,2,3,4,5"
-      }));
-  }
-};
+// publicApi.getTenantSettings was removed. It called
+// /api/tenant/settings/public, a route that was never written, and swallowed
+// the 404 by returning hardcoded office hours — so the employee dashboard
+// displayed made-up values and reported no error. Use commonApi.getSettings(),
+// which is authenticated, reads the tenant from the token, and fails loudly.
 
 
 
@@ -648,7 +668,7 @@ export default {
   tenant: tenantApi,
   superAdmin: superAdminApi,
   auth: authApi,
-  public:publicApi,
+  common: commonApi,
   tenantTasks: tenantTaskApi,
   orgTasks: orgTaskApi,
   employeeTasks: employeeTaskApi,

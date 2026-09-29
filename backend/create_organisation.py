@@ -202,15 +202,18 @@ ORGANISATION READY
 
   Organisation      {tenant.name}   (tenant id = {tenant.id})
 
-  TENANT ADMIN      sign in at  /login/tenant
+  All three sign in at the same place — /login. There is no role to pick;
+  the server works out what each account is from its credentials.
+
+  TENANT ADMIN
     Email           {tenant_admin_email}
     Password        {tenant_admin_password}
 
-  ORG ADMIN         sign in at  /login/org
+  ORG ADMIN
     Email           {args.email}
     Password        {password}
 
-  EMPLOYEE          sign in at  /login/employee
+  EMPLOYEE
     Email           {employee_email}
     Code            {emp.employee_code}
     Password        {employee_password}

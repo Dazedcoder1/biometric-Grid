@@ -1,138 +1,117 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+//
+// Who is signed in, derived from the access token and nothing else.
+//
+// The important change from the earlier version: `login()` no longer accepts a
+// user object from its caller. The three role-specific login pages each passed
+// the role belonging to the page you happened to click, so the app's idea of
+// your role came from a URL until the next reload, when the token decoder
+// quietly replaced it with the real one. Now there is one source — the token —
+// and one function that reads it.
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { userFromToken } from '../utils/roles';
 
 const AuthContext = createContext();
 
+// The legacy tenant API key. It carries a tenant, not a person, so there is no
+// user id and no name to show — which is exactly why password logins exist for
+// all three roles now. Kept working so existing machine-to-machine setups and
+// anyone mid-migration are not locked out.
+const API_KEY_USER = {
+  id: null,
+  role: 'tenant_admin',
+  originalRole: 'tenant_admin',
+  name: 'Tenant Admin',
+  email: null,
+  viaApiKey: true,
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('access_token'));
-  const [authType, setAuthType] = useState(localStorage.getItem('auth_type'));
+  const [token, setToken] = useState(() => localStorage.getItem('access_token'));
+  const [authType, setAuthType] = useState(() => localStorage.getItem('auth_type'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('🔍 AuthContext initializing...');
-    console.log('Auth type from localStorage:', authType);
-    console.log('Has API key:', !!localStorage.getItem('api_key'));
-    console.log('Has Bearer token:', !!localStorage.getItem('access_token'));
-    
-    const initAuth = () => {
-      if (authType === 'api_key') {
-        // API key based auth (tenant)
-        const apiKey = localStorage.getItem('api_key');
-        if (apiKey) {
-          console.log('✅ Setting up Tenant Admin user from API key');
-          const userData = {
-            id: null,
-            role: 'tenant_admin',
-            name: 'Tenant Admin',
-            email: null,
-          };
-          setUser(userData);
-          console.log('👤 User set:', userData);
-        } else {
-          console.warn('⚠️ Auth type is api_key but no API key found');
-          performLogout();
-        }
-      } else if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          console.log('📦 Token payload:', payload);
-          
-          let frontendRole = payload.role;
-          if (payload.role === 'tenant_admin' || payload.role === 'superadmin') {
-            frontendRole = 'tenant_admin';
-          } else if (payload.role === 'org_admin' || payload.role === 'department_admin') {
-            frontendRole = 'org_admin';
-          } else if (payload.role === 'employee' || payload.role === 'user') {
-            frontendRole = 'employee';
-          }
-          
-          const userData = {
-            id: payload.sub || payload.user_id || payload.id,
-            role: frontendRole,
-            originalRole: payload.role,
-            name: payload.name,
-            email: payload.email || payload.sub,
-          };
-          setUser(userData);
-          console.log('👤 User set from Bearer token:', userData);
-        } catch (e) {
-          console.error('❌ Invalid token:', e);
-          performLogout();
-        }
-      } else {
-        console.log('ℹ️ No auth credentials found');
-        setUser(null);
-      }
-      setLoading(false);
-    };
-    
-    initAuth();
+    if (authType === 'api_key') {
+      if (localStorage.getItem('api_key')) setUser(API_KEY_USER);
+      else performLogout();
+    } else if (token) {
+      const derived = userFromToken(token);
+      // A token we cannot read, or one carrying a role this app has no screens
+      // for, is not a session. Signing out is the honest response: the
+      // alternative is a shell with no working navigation.
+      if (derived) setUser(derived);
+      else performLogout();
+    } else {
+      setUser(null);
+    }
+    setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, authType]);
 
-  const login = (accessToken, userData, isApiKeyAuth = false) => {
-    console.log('🔐 Login called, isApiKeyAuth:', isApiKeyAuth);
-    console.log('📝 User data:', userData);
-    
-    if (isApiKeyAuth) {
-      // For API key auth, we don't store token
-      localStorage.setItem('auth_type', 'api_key');
-      localStorage.setItem('user', JSON.stringify(userData));
-      setAuthType('api_key');
-      setUser(userData);
-      console.log('✅ API Key auth user set:', userData);
-      console.log('✅ auth_type set to:', localStorage.getItem('auth_type'));
-    } else {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('auth_type', 'bearer');
-      localStorage.setItem('user', JSON.stringify(userData));
-      setToken(accessToken);
-      setAuthType('bearer');
-      setUser(userData);
-      console.log('✅ Bearer token auth user set:', userData);
-    }
+  /**
+   * Start a session from an access token.
+   *
+   * Takes the token alone on purpose. Anything the UI needs about the person
+   * comes out of it, so there is no way for a caller to assert a role.
+   */
+  const login = (accessToken, { refreshToken } = {}) => {
+    const derived = userFromToken(accessToken);
+    if (!derived) throw new Error('The server returned a sign-in token this app cannot read.');
+
+    localStorage.setItem('access_token', accessToken);
+    localStorage.setItem('auth_type', 'bearer');
+    if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+
+    setToken(accessToken);
+    setAuthType('bearer');
+    setUser(derived);
+    return derived;
+  };
+
+  /** Sign in with a tenant API key. No token, no identity — see API_KEY_USER. */
+  const loginWithApiKey = (apiKey) => {
+    localStorage.setItem('api_key', apiKey);
+    localStorage.setItem('auth_type', 'api_key');
+    setAuthType('api_key');
+    setUser(API_KEY_USER);
+    return API_KEY_USER;
   };
 
   const performLogout = () => {
-    console.log('🔓 Performing logout - clearing all localStorage...');
-    
-    // Clear ALL auth-related items from localStorage
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('api_key');
-    localStorage.removeItem('auth_type');
-    localStorage.removeItem('user');
-    
-    // Clear any other potential auth items
-    localStorage.removeItem('token');
-    localStorage.removeItem('userData');
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('username');
-    localStorage.removeItem('password');
-    
-    // Reset state
+    // Listed explicitly rather than clearing everything: localStorage is shared
+    // with the theme preference and anything else the app keeps, and signing
+    // out should not reset the interface.
+    for (const key of [
+      'access_token', 'refresh_token', 'api_key', 'auth_type', 'user',
+      'token', 'userData', 'user_role', 'username', 'password',
+      // The organisation a Super Admin was acting within. Left behind, the
+      // next person to sign in on this machine would silently inherit it.
+      'acting_tenant_id', 'acting_tenant_name',
+    ]) {
+      localStorage.removeItem(key);
+    }
+
     setToken(null);
     setAuthType(null);
     setUser(null);
-    
-    console.log('✅ All auth data cleared from localStorage');
   };
 
   const logout = () => {
     performLogout();
-    // Force a hard redirect to completely reset the app state
+    // A hard navigation, not a route change: it drops every component's state,
+    // including any credential secret still held in memory on the vault screen.
     window.location.href = '/';
   };
 
-  const hasRole = (allowedRoles) => {
-    if (!user) return false;
-    const hasRole = allowedRoles.includes(user.role);
-    console.log('🔍 hasRole check:', { userRole: user.role, allowedRoles, hasRole });
-    return hasRole;
-  };
+  const hasRole = (allowedRoles) => !!user && allowedRoles.includes(user.role);
 
   return (
-    <AuthContext.Provider value={{ user, token, authType, login, logout, loading, hasRole }}>
+    <AuthContext.Provider
+      value={{ user, token, authType, login, loginWithApiKey, logout, loading, hasRole }}
+    >
       {children}
     </AuthContext.Provider>
   );

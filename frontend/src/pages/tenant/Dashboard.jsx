@@ -56,7 +56,7 @@ const TenantDashboard = () => {
     } catch (err) {
       console.error('Dashboard fetch error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load dashboard');
+      setError(err?.message || 'Failed to load dashboard');
     } finally {
       setLoading(false);
     }

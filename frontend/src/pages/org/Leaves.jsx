@@ -27,7 +27,7 @@ const Leaves = () => {
       setRequests(data || []);
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      showToast("Failed to load leave requests", "error");
+      showToast(err?.message || "Failed to load leave requests", "error");
     } finally {
       setLoading(false);
     }

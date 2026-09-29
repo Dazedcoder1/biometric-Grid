@@ -1,7 +1,7 @@
 // src/components/Sidebar.jsx
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { Key, Lock, LogOut, Monitor } from 'lucide-react';
+import { Link, NavLink } from 'react-router-dom';
+import { Building2, ChevronsUpDown, Key, Lock, LogOut, Monitor } from 'lucide-react';
 import { 
   BarChart3, 
   Calendar, 
@@ -25,8 +25,10 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getActingTenantName } from '../services/api';
 
 const Sidebar = ({ role, label, iconColor }) => {
+  const actingTenantName = getActingTenantName();
   const { logout } = useAuth();
 
   const getNavItems = () => {
@@ -46,9 +48,11 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <Github size={18} />, label: 'GitHub Repos', path: '/super/github-repos' },
           { icon: <Key size={18} />, label: 'Change API Key', path: '/super/change-api-key' },
           { icon: <Settings size={18} />, label: 'Settings', path: '/super/settings' },
-          // Credential vault. Tenant Admin can manage credentials and read the
-          // audit log, but cannot reveal secrets — that role authenticates by
-          // API key with no second factor. ARCHITECTURE.md §5.
+          // Credential vault. Tenant Admin now holds credential.reveal too —
+          // the old restriction assumed an API key with no second factor, and
+          // this role signs in with a password and enrols an authenticator
+          // like anyone else. Reveal is still gated by step-up MFA, which an
+          // API-key caller cannot satisfy. Migration a6b7c8d9e0f1.
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
           { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
@@ -104,7 +108,35 @@ const Sidebar = ({ role, label, iconColor }) => {
           <div className="sb-role">{label}</div>
         </div>
       </div>
-      
+
+      {/* Which organisation a Super Admin is acting within, and how to change
+          it. Shown only for them — a tenant admin has exactly one organisation
+          and no choice to make, so the control would be noise. Stating it
+          permanently matters here: every screen below is scoped to this
+          organisation, and acting on the wrong one is an easy mistake to make
+          and a hard one to notice. */}
+      {actingTenantName && (
+        <Link
+          to="/choose-organisation"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            margin: '0.6rem 0.75rem 0', padding: '0.5rem 0.7rem',
+            background: 'var(--bg3)', border: '1px solid var(--border)',
+            borderRadius: 8, textDecoration: 'none', color: 'var(--text2)',
+          }}
+          title="Switch organisation"
+        >
+          <Building2 size={14} style={{ flexShrink: 0, color: 'var(--purple)' }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', fontWeight: 500,
+            color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap' }}>
+            {actingTenantName}
+          </span>
+          <ChevronsUpDown size={13} style={{ flexShrink: 0 }} />
+        </Link>
+      )}
+
+
       <div style={{ flex: 1, padding: '0.5rem 0' }}>
         {navItems.map((item, idx) => (
           // A `section` entry is a heading, not a link. Handled here rather

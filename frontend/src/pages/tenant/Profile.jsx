@@ -42,7 +42,7 @@ const TenantProfile = () => {
     } catch (err) {
       console.error('Failed to fetch profile:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load profile information');
+      setError(err?.message || 'Failed to load profile information');
     } finally {
       setLoading(false);
     }

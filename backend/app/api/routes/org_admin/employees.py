@@ -104,6 +104,60 @@ async def delete_employee(employee_id: int, current_user: User = Depends(require
     await db.commit()
     return {"message": "Employee deactivated"}
 
+@router.patch('/employees/{employee_id}/assign-fingerprint')
+async def assign_fingerprint(
+    employee_id: int,
+    data: AssignFingerprintRequest,
+    current_user: User = Depends(require_role('org_admin')),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Assign a fingerprint slot to an employee.
+
+    AssignFingerprintRequest was already declared in this file; the route that
+    would have used it was never written, so the UI's assign call 404'd.
+
+    A slot is a physical register on the reader, numbered 1-127, and the device
+    cannot hold two people in one slot. Uniqueness is therefore enforced across
+    the whole TENANT, not the department: two departments sharing a lobby
+    reader would otherwise both assign slot 12 and the second enrolment would
+    silently overwrite the first — the kind of failure that shows up as one
+    person clocking in as another.
+    """
+    if not 1 <= data.finger_id <= 127:
+        raise HTTPException(400, "Finger ID must be between 1 and 127.")
+
+    result = await db.execute(select(User).where(
+        User.id == employee_id,
+        User.tenant_id == current_user.tenant_id,
+        User.dept_id == current_user.dept_id,
+        User.role == 'employee',
+    ))
+    employee = result.scalars().first()
+    if not employee:
+        raise HTTPException(404, "Employee not found")
+
+    clash = (await db.execute(select(User).where(
+        User.tenant_id == current_user.tenant_id,
+        User.finger_id == data.finger_id,
+        User.id != employee_id,
+    ))).scalars().first()
+    if clash:
+        raise HTTPException(
+            409,
+            f"Finger ID {data.finger_id} is already assigned to {clash.name}. "
+            "Pick a free slot, or clear theirs first.",
+        )
+
+    employee.finger_id = data.finger_id
+    await db.commit()
+    return {
+        "message": f"Finger ID {data.finger_id} assigned to {employee.name}",
+        "employee_id": employee.id,
+        "finger_id": data.finger_id,
+    }
+
+
 @router.get('/employees/{employee_id}')
 async def get_employee(employee_id: int, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == employee_id, User.tenant_id == current_user.tenant_id, User.dept_id == current_user.dept_id, User.role == 'employee'))

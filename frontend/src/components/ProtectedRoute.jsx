@@ -1,16 +1,16 @@
 // src/components/ProtectedRoute.jsx
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { homePathFor } from '../utils/roles';
+import { getActingTenantId } from '../services/api';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, token, authType, loading } = useAuth();
-
-  console.log('🛡️ ProtectedRoute check:', { user, token, authType, loading, allowedRoles });
+  const location = useLocation();
 
   // Show loading state while checking authentication
   if (loading) {
-    console.log('⏳ Still loading...');
     return (
       <div style={{ 
         display: 'flex', 
@@ -33,30 +33,32 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     );
   }
 
-  // Check if user is authenticated
-  // For API key auth, we don't have a token but we have authType === 'api_key' and user
+  // For API key auth there is no token — the key itself is the credential.
   const isAuthenticated = token || authType === 'api_key';
-  
+
   if (!isAuthenticated || !user) {
-    console.log('❌ Not authenticated, redirecting to home');
-    return <Navigate to="/" replace />;
+    // Carry where they were going, so signing in returns them there instead of
+    // dumping them on a dashboard and making them navigate again.
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  // Check if user has required role
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    console.log('❌ Role not allowed, redirecting to appropriate dashboard');
-    // Redirect to appropriate dashboard based on role
-    if (user.role === 'tenant_admin') {
-      return <Navigate to="/super/dashboard" replace />;
-    } else if (user.role === 'org_admin') {
-      return <Navigate to="/org/dashboard" replace />;
-    } else if (user.role === 'employee') {
-      return <Navigate to="/emp/dashboard" replace />;
-    }
-    return <Navigate to="/" replace />;
+    return <Navigate to={homePathFor(user.role)} replace />;
   }
 
-  console.log('✅ Access granted to protected route');
+  // A Super Admin has no organisation of their own, and every screen under
+  // /super is tenant-scoped. Without a chosen organisation each of those pages
+  // renders, fires its requests and shows an error — so send them to the
+  // chooser first rather than letting them watch a dashboard fail.
+  const needsOrganisation = (
+    user.originalRole === 'super_admin'
+    && !getActingTenantId()
+    && location.pathname.startsWith('/super')
+  );
+  if (needsOrganisation) {
+    return <Navigate to="/choose-organisation" replace state={{ from: location.pathname }} />;
+  }
+
   return children;
 };
 

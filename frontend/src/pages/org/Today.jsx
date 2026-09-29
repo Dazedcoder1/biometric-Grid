@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Plus, UserCheck, UserX, Clock, Calendar as CalendarIcon, AlertCircle, RefreshCw } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
-import { orgApi, tenantApi } from '../../services/api';
+import { orgApi, commonApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 const Today = () => {
@@ -14,7 +14,7 @@ const Today = () => {
 
   const fetchSettings = async () => {
     try {
-      const data = await tenantApi.getSettings();
+      const data = await commonApi.getSettings();
       setSettings(data);
     } catch (err) {
       console.error("Failed to fetch settings:", err);
@@ -52,7 +52,7 @@ const Today = () => {
       }
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      setError("Failed to load attendance");
+      setError(err?.message || "Failed to load attendance");
       console.error("Error fetching attendance:", err);
     } finally {
       setLoading(false);

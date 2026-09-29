@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
 import { Check, Timer, X } from 'lucide-react';
-import { employeeApi, tenantApi } from '../../services/api';
+import { employeeApi, commonApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 const Attendance = () => {
@@ -22,7 +22,7 @@ const Attendance = () => {
 
   const fetchSettings = async () => {
     try {
-      const data = await tenantApi.getSettings();
+      const data = await commonApi.getSettings();
       setSettings(data);
     } catch (err) {
       console.error("Fetch settings error:", err);

@@ -33,7 +33,7 @@ const Leaves = () => {
     } catch (err) {
       console.error('Fetch leaves error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load leave requests');
+      setError(err?.message || 'Failed to load leave requests');
     } finally {
       setLoading(false);
     }

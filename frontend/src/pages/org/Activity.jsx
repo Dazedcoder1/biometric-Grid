@@ -25,7 +25,7 @@ const Activity = () => {
       setActivities(data || []);
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      setError("Failed to load activity log");
+      setError(err?.message || "Failed to load activity log");
     } finally {
       setLoading(false);
     }

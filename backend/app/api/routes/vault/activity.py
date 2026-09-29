@@ -25,6 +25,7 @@ from app.api.deps_security import (
 )
 from app.core import audit
 from app.db.session import get_db
+from app.models.domain import User
 from app.models.security import AuditLog
 from app.services import vault_service as svc
 
@@ -42,30 +43,108 @@ CREDENTIAL_ACTIONS = (
 
 #: Phrasing for the UI. Kept here rather than in the frontend so the wording
 #: cannot drift from what was actually recorded.
+#:
+#: This must cover every action string passed to audit.record anywhere in the
+#: application. It previously covered twelve of them, so the other seventeen —
+#: every MFA event, every denial, every dependency and policy change — reached
+#: the audit log viewer as raw identifiers like "share.escalation_blocked"
+#: sitting next to phrases like "revoked a share". tests/test_audit_labels.py
+#: fails if a new action is added without a label here.
+#: Labelled, but nothing in the application writes them yet. Kept because
+#: CREDENTIAL_ACTIONS already filters for both and the wording is settled — but
+#: named here so the map does not quietly imply the system records things it
+#: does not. Delete from this set when the feature that writes them lands.
+RESERVED = {"credential.viewed", "ownership.transferred"}
+
 LABELS = {
+    # credentials
     "credential.created": "created",
     "credential.viewed": "viewed",
     "credential.revealed": "revealed the secret",
     "credential.copied": "copied the secret",
     "credential.updated": "edited",
     "credential.rotated": "rotated the secret",
+    "credential.rotation_impact": "recorded rotation impact",
     "credential.deleted": "deleted",
     "credential.tamper_detected": "INTEGRITY FAILURE",
+
+    # sharing and ownership
     "share.granted": "shared",
     "share.revoked": "revoked a share",
     "share.expired": "access expired",
+    "share.escalation_blocked": "blocked an attempt to grant more access than held",
     "ownership.transferred": "transferred ownership",
+
+    # second factor
+    "mfa.enrolment_started": "started authenticator setup",
+    "mfa.enrolled": "enrolled an authenticator",
+    "mfa.enrolment_failed": "failed authenticator setup",
+    "mfa.verified": "passed a second-factor check",
+    "mfa.failed": "failed a second-factor check",
+    "mfa.step_up_required": "was asked for a second factor",
+    "mfa.step_up_rejected": "was refused at the second-factor check",
+
+    # authorisation
+    "authz.denied": "was denied",
+
+    # structure
+    "rack.created": "created a rack",
+    "system.created": "registered a system",
+    "dependency.linked": "linked a credential to a system",
+    "dependency.unlinked": "unlinked a credential from a system",
+    "rotation_policy.created": "set a rotation policy",
+    "rotation_policy.deleted": "removed a rotation policy",
+
+    # the log itself
+    "audit.exported": "exported the audit log",
+}
+
+#: Namespace to category, so the viewer can group and colour rows without
+#: parsing action strings in the browser. The namespace is already the grouping
+#: the data carries; this just names it.
+CATEGORIES = {
+    "credential": "credential",
+    "share": "access",
+    "ownership": "access",
+    "authz": "access",
+    "mfa": "auth",
+    "rack": "structure",
+    "system": "structure",
+    "dependency": "structure",
+    "rotation_policy": "structure",
+    "audit": "audit",
 }
 
 
-def _row(e: AuditLog) -> dict:
+def _label(action: str) -> str:
+    """
+    Human phrasing for an action.
+
+    Unknown actions are humanised rather than passed through raw. A new action
+    added elsewhere in the codebase should read as "did something plausible",
+    not leak a dotted identifier into a compliance export — and the test that
+    guards LABELS will catch it before anyone sees this fallback.
+    """
+    if action in LABELS:
+        return LABELS[action]
+    tail = action.split(".", 1)[-1]
+    return tail.replace("_", " ")
+
+
+def _category(action: str) -> str:
+    return CATEGORIES.get(action.split(".", 1)[0], "other")
+
+
+def _row(e: AuditLog, names: dict[int, str] | None = None) -> dict:
     return {
         "seq": e.seq,
         "occurred_at": e.occurred_at,
         "actor_id": e.actor_id,
+        "actor_name": (names or {}).get(e.actor_id),
         "actor_role": e.actor_role,
         "action": e.action,
-        "label": LABELS.get(e.action, e.action),
+        "label": _label(e.action),
+        "category": _category(e.action),
         "result": e.result,
         "reason": e.reason,
         "target_type": e.target_type,
@@ -73,6 +152,31 @@ def _row(e: AuditLog) -> dict:
         "source_ip": e.source_ip,
         "mfa_method": e.mfa_method,
         "details": e.details,
+    }
+
+
+async def _actor_names(db: AsyncSession, rows) -> dict[int, str]:
+    """
+    Current display names for the actors on this page of rows.
+
+    Resolved at read time, not stored on the entry. The log records an id
+    because that is the fact that cannot change; a name can be edited, and
+    copying one into an immutable record would freeze a value that later
+    disagrees with the user table. The trade is that these names are current
+    rather than historical — the id beside them is what identifies the account.
+
+    One query per page, bounded by the page size, rather than one per row.
+    """
+    ids = {e.actor_id for e in rows if e.actor_id is not None}
+    if not ids:
+        return {}
+
+    result = await db.execute(
+        select(User.id, User.name, User.email).where(User.id.in_(ids))
+    )
+    return {
+        uid: (name or email or f"User {uid}")
+        for uid, name, email in result.all()
     }
 
 
@@ -109,7 +213,7 @@ async def credential_activity(
         )
     ).scalars().all()
 
-    return [_row(e) for e in rows]
+    return [_row(e, await _actor_names(db, rows)) for e in rows]
 
 
 @router.get("/audit")
@@ -164,12 +268,13 @@ async def audit_log(
             q.order_by(AuditLog.occurred_at.desc()).limit(limit).offset(offset)
         )
     ).scalars().all()
+    names = await _actor_names(db, rows)
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "entries": [_row(e) for e in rows],
+        "entries": [_row(e, names) for e in rows],
     }
 
 
@@ -185,7 +290,8 @@ async def known_actions(
 
     rows = (await db.execute(q.order_by(AuditLog.action))).all()
     return [
-        {"action": a, "count": n, "label": LABELS.get(a, a)} for a, n in rows
+        {"action": a, "count": n, "label": _label(a), "category": _category(a)}
+        for a, n in rows
     ]
 
 
@@ -322,7 +428,7 @@ async def summary(
     return {
         "days": days,
         "by_action": [
-            {"action": a, "label": LABELS.get(a, a), "count": n} for a, n in by_action
+            {"action": a, "label": _label(a), "count": n} for a, n in by_action
         ],
         "success": counts.get("success", 0),
         # Denials are the interesting number — a spike is what probing looks

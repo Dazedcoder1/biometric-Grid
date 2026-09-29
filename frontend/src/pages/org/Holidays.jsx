@@ -21,7 +21,7 @@ const Holidays = () => {
       setHolidays(data || []);
     } catch (err) {
       if (err?.response?.status === 401) logout();
-      setError("Failed to load holidays");
+      setError(err?.message || "Failed to load holidays");
     } finally {
       setLoading(false);
     }

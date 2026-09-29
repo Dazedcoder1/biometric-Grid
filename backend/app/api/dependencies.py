@@ -60,6 +60,7 @@ async def require_employee(current_user: User = Depends(get_current_user)) -> Us
 
 async def verify_tenant_api_key(
     x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_acting_tenant_id: int | None = Header(None, alias="X-Acting-Tenant-Id"),
     authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db)
 ) -> Tenant:
@@ -73,6 +74,19 @@ async def verify_tenant_api_key(
     the request as 422 Unprocessable Entity before this function even ran. A
     422 reads as "your request body is malformed", which sent everyone looking
     at the wrong thing; the real meaning was "no credential supplied".
+
+    X-Acting-Tenant-Id exists for Super Admins, who have `tenant_id = NULL` by
+    design — they belong to the platform, not to an organisation. Every route
+    behind this dependency is tenant-scoped, so without a tenant to name there
+    is nothing for them to administer, and the whole Tenant Admin UI answered
+    them with "This admin is not attached to an organisation." The header says
+    which organisation they are acting within.
+
+    It is honoured ONLY for super_admin. A tenant_admin who sends it is
+    refused rather than ignored: silently using their own tenant would let a
+    client believe it was acting on another organisation while quietly writing
+    to its own, which is the more dangerous failure. Their scope is fixed by
+    their account and is not theirs to choose.
 
     Both paths end at the same Tenant, so route handlers are unaffected.
     """
@@ -101,6 +115,31 @@ async def verify_tenant_api_key(
                 403,
                 "This area is for Tenant Admins. Sign in with the tenant API key, "
                 f"or as a tenant admin — you are signed in as '{user.role}'.",
+            )
+
+        if user.role == "super_admin":
+            if x_acting_tenant_id is None:
+                # 409, not 403: nothing is forbidden here, the request is simply
+                # missing the one thing it needs. The client turns this into the
+                # organisation chooser rather than an error page.
+                raise HTTPException(
+                    409,
+                    "Choose an organisation first. A Super Admin belongs to the "
+                    "platform rather than to one organisation, so this request "
+                    "needs an X-Acting-Tenant-Id header naming which to act on.",
+                )
+            tenant = (
+                await db.execute(select(Tenant).where(Tenant.id == x_acting_tenant_id))
+            ).scalars().first()
+            if not tenant:
+                raise HTTPException(404, "That organisation does not exist.")
+            return tenant
+
+        # tenant_admin from here down.
+        if x_acting_tenant_id is not None and x_acting_tenant_id != user.tenant_id:
+            raise HTTPException(
+                403,
+                "You can only administer your own organisation.",
             )
         if not user.tenant_id:
             raise HTTPException(403, "This admin is not attached to an organisation.")

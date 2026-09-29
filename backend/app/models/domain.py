@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Enum, UniqueConstraint, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Enum, UniqueConstraint, Boolean, Text, Float
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 import enum
@@ -244,6 +244,12 @@ class Settings(Base):
     office_end_time = Column(String, default="18:00:00")
     late_threshold_minutes = Column(Integer, default=15)
     working_days = Column(String, default="1,2,3,4,5")
+    # The minimum a day must contain to count as worked. Every attendance
+    # screen already displayed this and every compliance figure was computed
+    # against it, but the column did not exist — so the UI silently used its
+    # own hardcoded 9.0 and the Settings page had nowhere to save a change.
+    # Float rather than Integer: half-day and 7.5-hour arrangements are common.
+    min_working_hours = Column(Float, nullable=False, server_default="9.0")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 # =========================

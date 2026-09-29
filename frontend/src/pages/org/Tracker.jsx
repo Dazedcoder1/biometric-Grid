@@ -98,7 +98,7 @@ const OrgTracker = () => {
     } catch (err) {
       console.error('Tracker dashboard error:', err);
       if (err?.response?.status === 401) logout();
-      setError('Failed to load tracker data');
+      setError(err?.message || 'Failed to load tracker data');
     } finally {
       setLoading(false);
     }

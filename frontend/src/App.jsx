@@ -4,8 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import Gateway from './pages/Gateway';
 import Login from './pages/Login';
+import ChooseOrganisation from './pages/super/ChooseOrganisation';
 import ChangeApiKey from './pages/tenant/ChangeApiKey';
 import OrgTracker from './pages/org/Tracker';
 
@@ -59,9 +59,27 @@ function App() {
       <AuthProvider>
         <Router>
           <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Gateway />} />
-            <Route path="/login/:role" element={<Login />} />
+            {/* Public routes.
+                One sign-in form for all three roles — the server decides what
+                you are, so there is nothing to pick first. The old per-role
+                paths redirect rather than 404, because they are in people's
+                bookmarks and in the output of create_organisation.py. */}
+            <Route path="/" element={<Login />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/login/:role" element={<Navigate to="/login" replace />} />
+
+            {/* Super Admins pick which organisation to administer. Protected,
+                but with no role list of its own: only a Super Admin is ever
+                sent here, and a tenant admin who types the URL is bounced to
+                their own dashboard by the redirect inside the page. */}
+            <Route
+              path="/choose-organisation"
+              element={(
+                <ProtectedRoute allowedRoles={['tenant_admin']}>
+                  <ChooseOrganisation />
+                </ProtectedRoute>
+              )}
+            />
 
             {/* ==================== TENANT ADMIN ROUTES ==================== */}
             <Route 
