@@ -18,12 +18,15 @@ import {
 
 import DashboardLayout from '../../layouts/DashboardLayout';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import { useAuth } from '../../context/AuthContext';
 import { vaultApi } from '../../services/api';
 import { DEFAULTS, estimateStrength, generatePassword } from '../../utils/passwordGenerator';
+import { sidebarPropsFor } from '../../utils/sidebarRole';
 
 const REVEAL_SECONDS = 30;
 
 export default function Credentials() {
+  const { user } = useAuth();
   const [vaults, setVaults] = useState([]);
   const [activeRack, setActiveRack] = useState(null);
   const [items, setItems] = useState([]);
@@ -59,7 +62,13 @@ export default function Credentials() {
   }, [activeRack]);
 
   const loadItems = useCallback(async () => {
-    const data = await vaultApi.list({ rackId: activeRack, search: search || undefined });
+    // activeRack === null means "all racks", not "don't load". An early return
+    // here made the list permanently empty whenever rack selection failed for
+    // any reason — which is a blank screen with no error to explain it.
+    const data = await vaultApi.list({
+      rackId: activeRack || undefined,
+      search: search || undefined,
+    });
     setItems(data);
   }, [activeRack, search]);
 
@@ -80,7 +89,6 @@ export default function Credentials() {
   }, []);
 
   useEffect(() => {
-    if (activeRack === null) return;
     loadItems().catch((err) => setError(err.message));
   }, [activeRack, search, loadItems]);
 
@@ -187,14 +195,7 @@ export default function Credentials() {
   // ─── render ────────────────────────────────────────────────────────────────
 
   return (
-    <DashboardLayout
-      title="Credential Vault"
-      role="employee"
-      label="Vault"
-      abbr="CV"
-      color="#22c55e"
-      bgColor="rgba(34,197,94,0.15)"
-    >
+    <DashboardLayout title="Credential Vault" {...sidebarPropsFor(user)}>
       <style>{`
         .cv-wrap { display: grid; grid-template-columns: 200px 1fr; gap: 1.25rem; }
         @media (max-width: 860px) { .cv-wrap { grid-template-columns: 1fr; } }
@@ -245,6 +246,14 @@ export default function Credentials() {
             opacity: .6, marginBottom: '.5rem', fontFamily: 'var(--mono)' }}>
             Racks
           </div>
+          {/* Always reachable, so a credential can never be invisible just
+              because it sits in a rack that is not selected. */}
+          <button
+            className={`cv-rack ${activeRack === null ? 'active' : ''}`}
+            onClick={() => setActiveRack(null)}
+          >
+            All credentials
+          </button>
           {racks.map((r) => (
             <button
               key={r.id}
@@ -378,7 +387,17 @@ export default function Credentials() {
           racks={racks}
           defaultRack={activeRack}
           onClose={() => setShowCreate(false)}
-          onCreated={async () => { setShowCreate(false); note('Credential saved.'); await loadItems(); }}
+          onCreated={async (created) => {
+            setShowCreate(false);
+            note('Credential saved.');
+            // Jump to the rack it landed in. Saving into a rack other than the
+            // one on screen previously looked like the save had failed.
+            if (created?.rack_id && created.rack_id !== activeRack) {
+              setActiveRack(created.rack_id);   // the effect reloads
+            } else {
+              await loadItems();
+            }
+          }}
           onError={setError}
         />
       )}
@@ -399,20 +418,65 @@ export default function Credentials() {
 // ─── MFA enrolment ───────────────────────────────────────────────────────────
 
 function MfaPrompt({ onDone }) {
-  const [secret, setSecret] = useState(null);
+  const [enrolment, setEnrolment] = useState(null);   // { secret, provisioning_uri }
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const canvasRef = useRef(null);
 
   const start = async () => {
-    try { setSecret((await vaultApi.beginEnrolment()).secret); }
-    catch (e) { setErr(e.message); }
+    setErr('');
+    try {
+      setEnrolment(await vaultApi.beginEnrolment());
+    } catch (e) {
+      setErr(e.message);
+    }
   };
+
+  // Render the QR locally. The otpauth:// URI contains the TOTP secret, so it
+  // must never go to an external QR service — that would hand the second
+  // factor to a third party. `qrcode` draws it in this browser and nothing
+  // leaves the page.
+  useEffect(() => {
+    if (!enrolment?.provisioning_uri || !canvasRef.current) return;
+    let cancelled = false;
+
+    import('qrcode')
+      .then((QR) => {
+        if (cancelled) return;
+        QR.toCanvas(canvasRef.current, enrolment.provisioning_uri, {
+          width: 180, margin: 1,
+        }).catch(() => setErr('Could not draw the QR code — use the key below.'));
+      })
+      .catch(() => {
+        // Library missing: the manual key below still works, so say so rather
+        // than leaving a blank square.
+        setErr('QR rendering unavailable — enter the key manually instead.');
+      });
+
+    return () => { cancelled = true; };
+  }, [enrolment]);
 
   const confirm = async (e) => {
     e.preventDefault();
-    try { await vaultApi.confirmEnrolment(code); onDone(); }
-    catch (e2) { setErr(e2.message); }
+    setBusy(true);
+    setErr('');
+    try {
+      await vaultApi.confirmEnrolment(code);
+      onDone();
+    } catch (e2) {
+      setErr(e2.message);
+      setCode('');
+    } finally {
+      setBusy(false);
+    }
   };
+
+  // Grouped in fours. A 32-character base32 string typed off a screen in one
+  // run is a transcription error waiting to happen.
+  const grouped = enrolment?.secret
+    ? enrolment.secret.match(/.{1,4}/g).join(' ')
+    : '';
 
   return (
     <div className="card-box" style={{ marginBottom: '1.25rem',
@@ -421,30 +485,72 @@ function MfaPrompt({ onDone }) {
         Set up your authenticator
       </h4>
       <p style={{ fontSize: '.84rem', opacity: .75, marginTop: 0 }}>
-        Revealing a secret needs a second factor. Enrol once and you will be asked
-        for a code only when you reveal something.
+        Revealing a secret needs a second factor. Enrol once, and you will only
+        be asked for a code when you actually reveal something.
       </p>
-      {err && <div style={{ fontSize: '.8rem', color: '#ef4444' }}>{err}</div>}
+      {err && (
+        <div style={{ fontSize: '.8rem', color: '#ef4444', marginBottom: '.5rem' }}>
+          {err}
+        </div>
+      )}
 
-      {!secret ? (
+      {!enrolment ? (
         <button className="cv-btn" onClick={start}>Start setup</button>
       ) : (
-        <form onSubmit={confirm}>
-          <p style={{ fontSize: '.8rem', opacity: .75 }}>
-            Add this key to your authenticator app, then enter the code it shows.
-            It is displayed once.
-          </p>
-          <code className="cv-secret" style={{ display: 'inline-block',
-            marginBottom: '.6rem' }}>{secret}</code>
-          <div style={{ display: 'flex', gap: '.5rem' }}>
-            <input className="form-input" placeholder="000000" maxLength={6}
-              value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              style={{ fontFamily: 'var(--mono)', width: 120 }} />
-            <button className="cv-btn" type="submit" disabled={code.length < 6}>
-              Confirm
-            </button>
+        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap',
+          alignItems: 'flex-start' }}>
+          <div style={{ background: '#fff', padding: 8, borderRadius: 8 }}>
+            <canvas ref={canvasRef} />
           </div>
-        </form>
+
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <p style={{ fontSize: '.8rem', opacity: .8, marginTop: 0 }}>
+              Scan this with Google Authenticator, 1Password, Authy or similar.
+            </p>
+
+            <div style={{ fontSize: '.72rem', opacity: .6, marginBottom: '.2rem' }}>
+              Or enter this key by hand:
+            </div>
+            <div style={{ display: 'flex', gap: '.4rem', alignItems: 'center',
+              marginBottom: '.8rem' }}>
+              <code className="cv-secret" style={{ fontSize: '.78rem' }}>
+                {grouped}
+              </code>
+              <button type="button" className="cv-btn"
+                onClick={() => navigator.clipboard.writeText(enrolment.secret)}>
+                <Copy size={12} />
+              </button>
+            </div>
+
+            <form onSubmit={confirm}>
+              <div style={{ fontSize: '.72rem', opacity: .6, marginBottom: '.25rem' }}>
+                Then enter the 6-digit code it shows:
+              </div>
+              <div style={{ display: 'flex', gap: '.5rem' }}>
+                <input
+                  className="form-input"
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  style={{ fontFamily: 'var(--mono)', width: 120,
+                    letterSpacing: '.15em' }}
+                />
+                <button className="cv-btn" type="submit"
+                  disabled={code.length < 6 || busy}>
+                  {busy ? 'Checking…' : 'Confirm'}
+                </button>
+              </div>
+            </form>
+
+            <div style={{ fontSize: '.7rem', opacity: .55, marginTop: '.6rem' }}>
+              This key is shown once. If you lose it, start setup again.
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -471,9 +577,14 @@ function CreateModal({ racks, defaultRack, onClose, onCreated, onError }) {
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
-    try { await vaultApi.create(form); await onCreated(); }
-    catch (err) { onError(err.message); }
-    finally { setBusy(false); }
+    try {
+      const created = await vaultApi.create(form);
+      await onCreated(created);
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const toneColour = { danger: '#ef4444', warning: '#f59e0b',

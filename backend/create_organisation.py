@@ -32,6 +32,12 @@ from app.models.domain import Department, Settings, Tenant, User
 DEFAULT_DEPARTMENT = "General"
 
 
+def _slug(name: str) -> str:
+    """Organisation name to something usable in a default email address."""
+    cleaned = "".join(c.lower() if c.isalnum() else "-" for c in name)
+    return "-".join(part for part in cleaned.split("-") if part) or "org"
+
+
 async def run(args) -> int:
     async with AsyncSessionLocal() as db:
         # ── tenant ───────────────────────────────────────────────────────────
@@ -83,6 +89,41 @@ async def run(args) -> int:
             db.add(Settings(tenant_id=tenant.id))
             print("  created settings   : default office hours 09:00-18:00, Mon-Fri")
 
+        # ── the tenant admin ─────────────────────────────────────────────────
+        # A real user row, not just an API key. The key still exists for
+        # machine-to-machine calls, but a person signing in gets an identity —
+        # so the audit log names who acted, and they can enrol a second factor,
+        # which an API key can never do.
+        tenant_admin_password = args.password or f"Tenant@{secrets.token_hex(4)}"
+        tenant_admin_email = args.tenant_admin_email or f"admin@{_slug(args.name)}.local"
+
+        ta = (
+            await db.execute(
+                select(User).where(
+                    User.email == tenant_admin_email, User.tenant_id == tenant.id
+                )
+            )
+        ).scalars().first()
+
+        if ta:
+            ta.password_hash = hash_password(tenant_admin_password)
+            ta.role = "tenant_admin"
+            ta.is_active = True
+            print(f"  updated tenant adm : {tenant_admin_email} (password reset)")
+        else:
+            ta = User(
+                tenant_id=tenant.id,
+                name=f"{args.name} Administrator",
+                email=tenant_admin_email,
+                password_hash=hash_password(tenant_admin_password),
+                role="tenant_admin",
+                dept_id=dept.department_id,
+                is_active=True,
+            )
+            db.add(ta)
+            await db.flush()
+            print(f"  created tenant adm : {tenant_admin_email}")
+
         # ── the org admin ────────────────────────────────────────────────────
         password = args.password or f"Admin@{secrets.token_hex(4)}"
 
@@ -125,14 +166,17 @@ ORGANISATION READY
   Organisation      {tenant.name}   (tenant id = {tenant.id})
 
   TENANT ADMIN      sign in at  /login/tenant
-    API key         {api_key}
-    This is the Tenant Admin credential. There is no password for that
-    role — the key IS the login. Store it somewhere safe; it is shown in
-    full here and nowhere in the UI.
+    Email           {tenant_admin_email}
+    Password        {tenant_admin_password}
 
   ORG ADMIN         sign in at  /login/org
     Email           {args.email}
     Password        {password}
+
+  API KEY           {api_key}
+    For machine-to-machine calls only, in the X-API-Key header. People
+    sign in with the email and password above — an API key carries no
+    identity, so the audit log could not say who was holding it.
 
 {bar}
 From Tenant Admin you can now add departments, employees and further org
@@ -150,6 +194,10 @@ def main() -> int:
     parser.add_argument("email", help="Email for the first Org Admin")
     parser.add_argument("--password", help="Org Admin password (generated if omitted)")
     parser.add_argument("--admin-name", help="Display name for the Org Admin")
+    parser.add_argument(
+        "--tenant-admin-email",
+        help="Email for the Tenant Admin login. Defaults to admin@<org-slug>.local",
+    )
     parser.add_argument(
         "--department", default=DEFAULT_DEPARTMENT,
         help=f"Name of the initial department (default: {DEFAULT_DEPARTMENT})",

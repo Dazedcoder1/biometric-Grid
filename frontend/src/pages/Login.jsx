@@ -23,18 +23,28 @@ const Login = () => {
 
   // Configuration based on role
   const roleConfigs = {
+    // Tenant Admin now signs in with email and password like everyone else.
+    //
+    // It used to be an API key. That gave no user identity — the audit log
+    // could say "the tenant key did this" but never who was holding it — and a
+    // key cannot enrol a second factor, which is why Tenant Admin was barred
+    // from revealing secrets. A password login fixes both: actions become
+    // attributable to a person, and that person can enrol an authenticator.
+    //
+    // The API key still exists and still works for machine-to-machine calls;
+    // it is simply no longer how a human signs in.
     tenant: {
       title: 'Tenant Admin',
-      subtitle: 'API Key Authentication',
+      subtitle: 'Organisation Administration',
       color: 'var(--purple)',
       bgColor: 'rgba(168,85,247,0.1)',
-      btnText: 'Login with API Key',
+      btnText: 'Login as Tenant Admin',
       dashPath: '/super/dashboard',
       apiRole: 'tenant_admin',
       icon: '⬡',
-      useApiKey: true,
-      placeholder: 'Enter your API Key',
-      helpText: 'Use the API key provided by your system administrator'
+      useApiKey: false,
+      placeholder: 'Enter your email',
+      helpText: 'Use the email your organisation was set up with'
     },
     org: {
       title: 'Org Admin',

@@ -15,7 +15,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Network, Unlink } from 'lucide-react';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
+import { useAuth } from '../../context/AuthContext';
 import { vaultApi } from '../../services/api';
+import { sidebarPropsFor } from '../../utils/sidebarRole';
 
 const ROW = 34;
 const TOP = 30;
@@ -24,6 +26,7 @@ const RIGHT_X = 420;
 const NODE_W = 180;
 
 export default function DependencyMap() {
+  const { user } = useAuth();
   const [graph, setGraph] = useState(null);
   const [error, setError] = useState('');
   const [hover, setHover] = useState(null); // {type, id}
@@ -71,14 +74,7 @@ export default function DependencyMap() {
     : 200;
 
   return (
-    <DashboardLayout
-      title="Dependency Map"
-      role="superadmin"
-      label="Security"
-      abbr="DM"
-      color="#0ea5e9"
-      bgColor="rgba(14,165,233,0.15)"
-    >
+    <DashboardLayout title="Dependency Map" {...sidebarPropsFor(user)}>
       <style>{`
         .dm-node { cursor:pointer; }
         .dm-label { font-size:11px; fill:var(--text2); font-family:var(--mono); }

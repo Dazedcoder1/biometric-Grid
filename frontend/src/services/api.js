@@ -348,6 +348,8 @@ export const authApi = {
 export const vaultApi = {
   // MFA
   mfaStatus: () => apiRequest('/api/vault/mfa/status'),
+  // Returns { secret, provisioning_uri }. The URI is the otpauth:// string
+  // that becomes a QR code — use it, do not make people type the raw secret.
   beginEnrolment: (label) =>
     apiRequest('/api/vault/mfa/enrol', {
       method: 'POST',

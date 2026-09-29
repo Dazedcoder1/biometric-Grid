@@ -11,11 +11,14 @@ import {
 } from 'lucide-react';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
+import { useAuth } from '../../context/AuthContext';
 import { vaultApi } from '../../services/api';
+import { sidebarPropsFor } from '../../utils/sidebarRole';
 
 const PAGE = 100;
 
 export default function AuditLog() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -79,14 +82,7 @@ export default function AuditLog() {
   const set = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
 
   return (
-    <DashboardLayout
-      title="Audit Log"
-      role="superadmin"
-      label="Security"
-      abbr="AL"
-      color="#a855f7"
-      bgColor="rgba(168,85,247,0.15)"
-    >
+    <DashboardLayout title="Audit Log" {...sidebarPropsFor(user)}>
       <style>{`
         .al-bar { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem; }
         .al-btn { background:var(--bg3); border:1px solid var(--border);

@@ -17,7 +17,9 @@ import {
 
 import DashboardLayout from '../../layouts/DashboardLayout';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import { useAuth } from '../../context/AuthContext';
 import { vaultApi } from '../../services/api';
+import { sidebarPropsFor } from '../../utils/sidebarRole';
 
 const LEVELS = ['view', 'reveal', 'edit', 'reshare', 'manage'];
 
@@ -30,6 +32,7 @@ const STATUS_TONE = {
 
 export default function CredentialDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [tree, setTree] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [error, setError] = useState('');
@@ -72,14 +75,7 @@ export default function CredentialDetail() {
   };
 
   return (
-    <DashboardLayout
-      title="Credential"
-      role="employee"
-      label="Vault"
-      abbr="CV"
-      color="#22c55e"
-      bgColor="rgba(34,197,94,0.15)"
-    >
+    <DashboardLayout title="Credential" {...sidebarPropsFor(user)}>
       <style>{`
         .cd-node { display:flex; align-items:center; gap:.75rem;
           padding:.6rem .8rem; border-radius:8px; }
