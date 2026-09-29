@@ -153,6 +153,43 @@ async def run(args) -> int:
             await db.flush()
             print(f"  created org admin  : {args.email}")
 
+        # ── an employee ──────────────────────────────────────────────────────
+        # Every role needs a working login to test with. Without one, the
+        # employee view — which is where most people will actually live — goes
+        # unexercised until someone tries it in anger.
+        employee_password = args.password or f"Employee@{secrets.token_hex(4)}"
+        employee_email = args.employee_email or f"employee@{_slug(args.name)}.local"
+
+        emp = (
+            await db.execute(
+                select(User).where(
+                    User.email == employee_email, User.tenant_id == tenant.id
+                )
+            )
+        ).scalars().first()
+
+        if emp:
+            emp.password_hash = hash_password(employee_password)
+            emp.role = "employee"
+            emp.is_active = True
+            print(f"  updated employee   : {employee_email} (password reset)")
+        else:
+            # employee_code must be unique per tenant. A short random suffix
+            # avoids colliding with codes created through the UI.
+            emp = User(
+                tenant_id=tenant.id,
+                name="Test Employee",
+                email=employee_email,
+                employee_code=f"EMP{secrets.randbelow(9000) + 1000}",
+                password_hash=hash_password(employee_password),
+                role="employee",
+                dept_id=dept.department_id,
+                is_active=True,
+            )
+            db.add(emp)
+            await db.flush()
+            print(f"  created employee   : {employee_email}")
+
         await db.commit()
 
         bar = "=" * 68
@@ -172,6 +209,11 @@ ORGANISATION READY
   ORG ADMIN         sign in at  /login/org
     Email           {args.email}
     Password        {password}
+
+  EMPLOYEE          sign in at  /login/employee
+    Email           {employee_email}
+    Code            {emp.employee_code}
+    Password        {employee_password}
 
   API KEY           {api_key}
     For machine-to-machine calls only, in the X-API-Key header. People
@@ -197,6 +239,10 @@ def main() -> int:
     parser.add_argument(
         "--tenant-admin-email",
         help="Email for the Tenant Admin login. Defaults to admin@<org-slug>.local",
+    )
+    parser.add_argument(
+        "--employee-email",
+        help="Email for the test Employee login. Defaults to employee@<org-slug>.local",
     )
     parser.add_argument(
         "--department", default=DEFAULT_DEPARTMENT,
