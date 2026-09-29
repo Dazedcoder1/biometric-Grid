@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, text
 from typing import List
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
@@ -62,6 +62,39 @@ async def get_leave_balance(
         "earned": {"total": 15, "taken": taken["earned_taken"] or 0, "remaining": 15 - (taken["earned_taken"] or 0)},
     }
 
+@router.get("/stats")
+async def get_leave_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Counts of this employee's leave requests by status, for the dashboard.
+
+    Statuses are counted explicitly rather than grouped, so a status the UI
+    does not know about cannot silently land in "total" without a column of
+    its own. "approved_by_dept" counts as approved because that is what it
+    means to the employee — the leave is granted.
+    """
+    result = await db.execute(text("""
+        SELECT
+            COUNT(*)                                                   AS total,
+            COUNT(*) FILTER (WHERE status = 'pending')                 AS pending,
+            COUNT(*) FILTER (WHERE status IN ('approved',
+                                              'approved_by_dept'))     AS approved,
+            COUNT(*) FILTER (WHERE status = 'rejected')                AS rejected,
+            COUNT(*) FILTER (WHERE status = 'cancelled')               AS cancelled
+        FROM leaves
+        WHERE employee_id = :user_id
+    """), {"user_id": current_user.id})
+    row = result.mappings().first()
+    return {
+        "total":     row["total"] or 0,
+        "pending":   row["pending"] or 0,
+        "approved":  row["approved"] or 0,
+        "rejected":  row["rejected"] or 0,
+        "cancelled": row["cancelled"] or 0,
+    }
+
+
 @router.patch("/{leave_id}/cancel", response_model=MessageResponse)
 async def cancel_leave(
     leave_id: int,
@@ -80,5 +113,3 @@ async def cancel_leave(
     leave.status = "cancelled"
     await db.commit()
     return {"message": "Leave cancelled successfully"}
-
-from sqlalchemy import text # Added missing import for balance logic

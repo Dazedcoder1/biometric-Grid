@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { TrendChart } from '../../components/Charts';
+import OfficeHoursFacts from '../../components/OfficeHoursFacts';
+import { Check, Info, X } from 'lucide-react';
 import { employeeApi, publicApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -87,14 +89,31 @@ const Dashboard = () => {
 
       await fetchSettings();
 
-      const [dashboard, today, monthly, upcoming, leaveStatsData, leaveBalance] = await Promise.all([
+      // allSettled, not all. These are independent panels; one of them
+      // failing is a reason to show that panel empty, not to replace the whole
+      // dashboard with an error page. Promise.all did the latter — a single
+      // missing endpoint took down attendance, hours and leave along with it.
+      const results = await Promise.allSettled([
         employeeApi.getDashboard(),
         employeeApi.getTodayAttendance(),
         employeeApi.getMonthlyStats(currentMonth, currentYear),
         employeeApi.getUpcomingHoliday(),
         employeeApi.getLeaveStats(),
-        employeeApi.getLeaveBalance(),
       ]);
+
+      const value = (i) => (results[i].status === 'fulfilled' ? results[i].value : null);
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.warn(`Dashboard panel ${i} failed:`, r.reason);
+        }
+      });
+
+      const [dashboard, today, monthly, upcoming, leaveStatsData] =
+        [0, 1, 2, 3, 4].map(value);
+
+      // The core call is the only one worth failing the page over: without it
+      // there is no dashboard to show.
+      if (results[0].status === 'rejected') throw results[0].reason;
 
       console.log('Dashboard Data:', dashboard);
       console.log('Today Attendance:', today);
@@ -213,9 +232,7 @@ const Dashboard = () => {
           gap: '1.5rem',
           flexWrap: 'wrap'
         }}>
-          <span>🕘 Office Hours: {settings.office_start_time?.slice(0,5)} - {settings.office_end_time?.slice(0,5)}</span>
-          <span>⚠️ Late after: +{settings.late_threshold_minutes} min</span>
-          <span>⏱️ Min hours required: {settings.min_working_hours}h</span>
+          <OfficeHoursFacts settings={settings} />
         </div>
       )}
 
@@ -243,7 +260,11 @@ const Dashboard = () => {
           <div className="today-lbl">Valid Hours</div>
           {todayAttendance.check_in && (
             <div className="today-lbl" style={{ fontSize: '0.6rem' }}>
-              {todayAttendance.met_min_hours ? '✓ Met requirement' : '✗ Below minimum'}
+              {todayAttendance.met_min_hours ? (
+                <><Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Met requirement</>
+              ) : (
+                <><X size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Below minimum</>
+              )}
             </div>
           )}
         </div>
@@ -373,7 +394,7 @@ const Dashboard = () => {
       {/* Info Card */}
       <div className="card-box" style={{ marginTop: '1rem', background: 'rgba(245,158,11,0.03)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <span style={{ fontSize: '1.2rem' }}>ℹ️</span>
+          <Info size={16} strokeWidth={1.75} style={{ color: 'var(--amber)', flexShrink: 0 }} />
           <span style={{ fontWeight: 500, fontSize: '0.85rem' }}>About Working Hours Calculation</span>
         </div>
         <p style={{ fontSize: '0.7rem', color: 'var(--text3)', lineHeight: 1.5 }}>
