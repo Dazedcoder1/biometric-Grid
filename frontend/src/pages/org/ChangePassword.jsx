@@ -1,7 +1,9 @@
 // src/pages/org/ChangePassword.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, CheckCircle, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Lock, CheckCircle, AlertCircle, Eye, EyeOff, ArrowLeft, Check, ShieldCheck } from 'lucide-react';
+
+const RULE_ICON = { size: 12, strokeWidth: 2.25, style: { verticalAlign: -1, marginRight: 6, opacity: 0.7 } };
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { orgApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -305,10 +307,10 @@ const OrgChangePassword = () => {
           <div className="requirements">
             <strong>Password Requirements:</strong>
             <ul>
-              <li>✓ Minimum 8 characters</li>
-              <li>✓ At least one uppercase letter (A-Z)</li>
-              <li>✓ At least one lowercase letter (a-z)</li>
-              <li>✓ At least one number (0-9)</li>
+              <li><Check {...RULE_ICON} />Minimum 8 characters</li>
+              <li><Check {...RULE_ICON} />At least one uppercase letter (A-Z)</li>
+              <li><Check {...RULE_ICON} />At least one lowercase letter (a-z)</li>
+              <li><Check {...RULE_ICON} />At least one number (0-9)</li>
             </ul>
           </div>
 
@@ -349,7 +351,8 @@ const OrgChangePassword = () => {
           color: 'var(--text3)',
           textAlign: 'center'
         }}>
-          🔒 For security, you'll need to login again after changing your password.
+          <ShieldCheck size={13} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 5, opacity: 0.8 }} />
+          For security, you'll need to login again after changing your password.
         </div>
       </div>
     </DashboardLayout>

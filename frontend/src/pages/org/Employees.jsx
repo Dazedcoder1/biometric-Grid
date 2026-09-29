@@ -498,13 +498,15 @@ const handleAdd = async (e) => {
     const creds = res?.credentials;
     
     // Build the toast message with password
-    let toastMessage = `✅ ${creds?.name} added successfully!\n`;
-    toastMessage += `📋 Employee Code: ${creds?.employee_code}\n`;
+    // Plain text — the toast renders its own status icon from `type`, so an
+    // emoji here would just sit next to it saying the same thing twice.
+    let toastMessage = `${creds?.name} added successfully\n`;
+    toastMessage += `Employee Code: ${creds?.employee_code}\n`;
     if (creds?.finger_id) {
-      toastMessage += `🖐️ Fingerprint ID: ${creds?.finger_id}\n`;
+      toastMessage += `Fingerprint ID: ${creds?.finger_id}\n`;
     }
     if (creds?.password) {
-      toastMessage += `🔑 Password: ${creds?.password}\n`;
+      toastMessage += `Password: ${creds?.password}\n`;
     }
     
     // Set toast (will NOT auto-dismiss)

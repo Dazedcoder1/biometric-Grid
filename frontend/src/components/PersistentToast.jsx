@@ -47,8 +47,13 @@ const PersistentToast = ({ message, type = 'success', onClose, autoClose = false
     // Optional: show a small tooltip or secondary notification
   };
 
-  // Parse message to check if it contains password
-  const hasPassword = message.includes('🔑') || message.toLowerCase().includes('password');
+  // Parse message to check if it contains password.
+  //
+  // This used to also sniff for a key emoji. That coupled the toast's
+  // behaviour to a decoration in the caller's string — remove the emoji and
+  // the "save this password" warning silently stops appearing. The word
+  // "password" is what actually identifies these messages.
+  const hasPassword = message.toLowerCase().includes('password');
   const passwordMatch = message.match(/Password: (\S+)/);
   const password = passwordMatch ? passwordMatch[1] : null;
 
@@ -99,7 +104,7 @@ const PersistentToast = ({ message, type = 'success', onClose, autoClose = false
           <div style={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.5, whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
             {message.split('\n').map((line, idx) => {
               // Check if line contains password for special styling
-              if (line.includes('🔑') || line.toLowerCase().includes('password')) {
+              if (line.toLowerCase().includes('password')) {
                 const passwordMatch = line.match(/Password: (\S+)/);
                 const pwd = passwordMatch ? passwordMatch[1] : null;
                 return (
@@ -155,7 +160,8 @@ const PersistentToast = ({ message, type = 'success', onClose, autoClose = false
             alignItems: 'center',
             gap: '8px',
           }}>
-            <span>⚠️ Please save this password. It won't be shown again.</span>
+            <AlertTriangle size={13} strokeWidth={2} style={{ flexShrink: 0 }} />
+            <span>Please save this password. It won't be shown again.</span>
           </div>
         )}
       </div>

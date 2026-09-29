@@ -1,6 +1,6 @@
 // src/pages/tenant/Employees.jsx
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, AlertCircle, Eye, User, Mail, Fingerprint, Building2, Calendar, Clock } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, Eye, User, Mail, Fingerprint, Building2, Calendar, Clock, X } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
 import { tenantApi } from '../../services/api';
@@ -270,7 +270,14 @@ const Employees = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Employee Details</h3>
-              <button className="btn btn-ghost" onClick={() => setShowDetailModal(false)} style={{ padding: '4px' }}>✕</button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setShowDetailModal(false)}
+                style={{ padding: '4px', display: 'flex' }}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
             </div>
             
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>

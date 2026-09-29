@@ -1,6 +1,9 @@
 // src/components/Topbar.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, Bell, Menu, User, LogOut } from 'lucide-react';
+import {
+  Moon, Sun, Bell, Menu, User, LogOut,
+  AlertTriangle, CheckCircle, ClipboardList, Clock, Fingerprint, UserPlus, UserX, XCircle,
+} from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { employeeApi, notificationsAPI } from '../services/api';
@@ -156,28 +159,38 @@ const Topbar = ({ title, userAbbr, bgColor, iconColor, role }) => {
     return 'Earlier';
   };
 
+  // Returns the icon element for a notification, not a character.
+  //
+  // Emoji were a poor fit here: they render in whatever the platform's colour
+  // font decides, which meant a bright cartoon hand and a red circle sitting
+  // in an otherwise monochrome interface, at a size and weight nothing else
+  // in the app uses. Lucide icons are inline SVG, so they inherit colour and
+  // stroke from the surrounding text and can be tinted deliberately where the
+  // status genuinely carries meaning — green for approved, red for rejected.
   const getNotificationIcon = (eventType) => {
+    const props = { size: 14, strokeWidth: 1.75, style: { verticalAlign: -2 } };
+
     switch (eventType) {
       case 'leave_requested':
       case 'leave_submitted':
-        return '📋';
+        return <ClipboardList {...props} />;
       case 'leave_approved':
       case 'leave_approved_final':
-        return '✅';
+        return <CheckCircle {...props} style={{ ...props.style, color: 'var(--green)' }} />;
       case 'leave_rejected':
-        return '❌';
+        return <XCircle {...props} style={{ ...props.style, color: 'var(--red)' }} />;
       case 'attendance_marked':
-        return '⏰';
+        return <Clock {...props} />;
       case 'late_arrival':
-        return '⚠️';
+        return <AlertTriangle {...props} style={{ ...props.style, color: 'var(--amber)' }} />;
       case 'employee_added':
-        return '👥';
+        return <UserPlus {...props} />;
       case 'employee_deactivated':
-        return '🔴';
+        return <UserX {...props} style={{ ...props.style, color: 'var(--red)' }} />;
       case 'fingerprint_enrolled':
-        return '🖐️';
+        return <Fingerprint {...props} />;
       default:
-        return '🔔';
+        return <Bell {...props} />;
     }
   };
 

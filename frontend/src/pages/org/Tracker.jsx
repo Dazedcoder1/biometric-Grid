@@ -598,7 +598,10 @@ const OrgTracker = () => {
                     </td>
                     <td style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{(emp.todayHours || 0).toFixed(1)}h</td>
                     <td style={{ fontFamily: 'var(--mono)' }}>{(emp.totalWorkingHours || 0).toFixed(1)}h</td>
-                    <td>📸 {emp.screenshotCount || 0}</td>
+                    <td>
+                      <Camera size={13} style={{ verticalAlign: -2, marginRight: 5, opacity: 0.7 }} />
+                      {emp.screenshotCount || 0}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button 
@@ -748,7 +751,9 @@ const OrgTracker = () => {
                           </div>
                         </div>
                         <div style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem' }}>
-                          {(session.durationHours || 0).toFixed(1)}h · 📸 {session.screenshotCount || 0}
+                          {(session.durationHours || 0).toFixed(1)}h ·{' '}
+                          <Camera size={12} style={{ verticalAlign: -2, marginRight: 4, opacity: 0.7 }} />
+                          {session.screenshotCount || 0}
                         </div>
                       </div>
                     ))
@@ -802,7 +807,8 @@ const OrgTracker = () => {
               zIndex: 1
             }}
           >
-            ✕ Close
+            <X size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
+            Close
           </button>
           
           <img 

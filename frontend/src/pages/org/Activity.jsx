@@ -3,7 +3,10 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { orgApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { RefreshCw, AlertCircle, Activity as ActivityIcon, User, Clock, Calendar, Filter } from 'lucide-react';
+import {
+  RefreshCw, AlertCircle, Activity as ActivityIcon, User, Clock, Calendar, Filter,
+  Bell, ClipboardList, Users,
+} from 'lucide-react';
 
 const Activity = () => {
   const { logout } = useAuth();
@@ -43,10 +46,11 @@ const Activity = () => {
   };
 
   const getActivityIcon = (type) => {
-    if (type?.includes('leave')) return '📋';
-    if (type?.includes('attendance')) return '⏰';
-    if (type?.includes('employee')) return '👥';
-    return '🔔';
+    const props = { size: 16, strokeWidth: 1.75, style: { color: 'var(--text3)' } };
+    if (type?.includes('leave')) return <ClipboardList {...props} />;
+    if (type?.includes('attendance')) return <Clock {...props} />;
+    if (type?.includes('employee')) return <Users {...props} />;
+    return <Bell {...props} />;
   };
 
   const filteredActivities = filter === "all" ? activities : activities.filter(a => a.event_type === filter);
@@ -93,7 +97,7 @@ const Activity = () => {
             <div key={idx} className="activity-item">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.2rem' }}>{getActivityIcon(a.event_type)}</span>
+                  <span style={{ display: 'inline-flex' }}>{getActivityIcon(a.event_type)}</span>
                   <div>
                     <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{a.title || a.message || a.event_type?.replace('_', ' ') || 'Activity'}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>

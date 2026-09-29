@@ -163,9 +163,9 @@ const Attendance = () => {
                     <td>
                       {a.check_in ? (
                         a.met_min_hours ? (
-                          <Badge type="present">✓ Yes</Badge>
+                          <Badge type="present"><CheckCircle size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Yes</Badge>
                         ) : (
-                          <Badge type="late">✗ No</Badge>
+                          <Badge type="late"><XCircle size={11} style={{ verticalAlign: -1, marginRight: 3 }} />No</Badge>
                         )
                       ) : <span style={{ fontSize: '0.7rem', color: '#6b7585' }}>—</span>}
                     </td>

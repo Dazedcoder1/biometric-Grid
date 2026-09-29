@@ -5,7 +5,7 @@ import Badge from '../../components/Badge';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { orgApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { CheckCircle, XCircle, RefreshCw, AlertCircle, Bell } from 'lucide-react';
+import { CheckCircle, XCircle, RefreshCw, AlertCircle, Bell, Check, X } from 'lucide-react';
 
 const Leaves = () => {
   const { logout } = useAuth();
@@ -46,7 +46,7 @@ const Leaves = () => {
     setProcessingId(id);
     try {
       await orgApi.approveLeave(id);
-      showToast(`✅ Leave request for ${employeeName} approved!`, 'success');
+      showToast(`Leave request for ${employeeName} approved`, 'success');
       // Immediately update local state by removing the approved leave
       setRequests(prev => prev.filter(r => r.leave_id !== id));
     } catch (err) {
@@ -64,7 +64,7 @@ const Leaves = () => {
     setProcessingId(leaveId);
     try {
       await orgApi.rejectLeave(leaveId, rejectReason);
-      showToast(`❌ Leave request for ${employeeName} rejected.`, 'error');
+      showToast(`Leave request for ${employeeName} rejected`, 'error');
       // Immediately update local state by removing the rejected leave
       setRequests(prev => prev.filter(r => r.leave_id !== leaveId));
       setShowRejectModal(null);
@@ -313,7 +313,11 @@ const Leaves = () => {
                     )}
                     {r.status !== "pending" && (
                       <span style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>
-                        {r.status === "approved" ? "✓ Approved" : "✗ Rejected"}
+                        {r.status === "approved" ? (
+                          <><Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Approved</>
+                        ) : (
+                          <><X size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Rejected</>
+                        )}
                       </span>
                     )}
                   </td>

@@ -1,7 +1,9 @@
 // src/pages/tenant/ChangeApiKey.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Key, CheckCircle, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Key, CheckCircle, AlertCircle, Eye, EyeOff, ArrowLeft, Check, Lightbulb } from 'lucide-react';
+
+const RULE_ICON = { size: 12, strokeWidth: 2.25, style: { verticalAlign: -1, marginRight: 6, opacity: 0.7 } };
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { tenantApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -293,10 +295,10 @@ const ChangeApiKey = () => {
           <div className="requirements">
             <strong>Requirements:</strong>
             <ul>
-              <li>✓ Minimum 8 characters</li>
-              <li>✓ At least one uppercase letter (A-Z)</li>
-              <li>✓ At least one lowercase letter (a-z)</li>
-              <li>✓ At least one number (0-9)</li>
+              <li><Check {...RULE_ICON} />Minimum 8 characters</li>
+              <li><Check {...RULE_ICON} />At least one uppercase letter (A-Z)</li>
+              <li><Check {...RULE_ICON} />At least one lowercase letter (a-z)</li>
+              <li><Check {...RULE_ICON} />At least one number (0-9)</li>
             </ul>
           </div>
 
@@ -337,7 +339,8 @@ const ChangeApiKey = () => {
           color: 'var(--text3)',
           textAlign: 'center'
         }}>
-          💡 After changing your API key, update it in all connected devices and applications immediately.
+          <Lightbulb size={13} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 5, opacity: 0.8 }} />
+          After changing your API key, update it in all connected devices and applications immediately.
         </div>
       </div>
     </DashboardLayout>

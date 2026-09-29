@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { tenantApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Save, AlertCircle, CheckCircle, Clock, Calendar, AlertTriangle, RefreshCw, Briefcase } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Clock, Calendar, AlertTriangle, RefreshCw, Briefcase, Timer } from 'lucide-react';
+
+const PREVIEW_ICON = { verticalAlign: -2, marginRight: 6, opacity: 0.75 };
 
 const TenantSettings = () => {
   const { logout } = useAuth();
@@ -277,11 +279,11 @@ const TenantSettings = () => {
             Current Configuration Preview
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8rem' }}>
-            <div>🕘 Start: <strong>{settings.office_start_time?.slice(0, 5)}</strong></div>
-            <div>🕕 End: <strong>{settings.office_end_time?.slice(0, 5)}</strong></div>
-            <div>⚠️ Late after: <strong>{settings.late_threshold_minutes} min</strong></div>
-            <div>⏱️ Min hours: <strong>{settings.min_working_hours} hours</strong></div>
-            <div>📅 Work days: <strong>{getWorkingDaysDisplay()}</strong></div>
+            <div><Clock size={13} style={PREVIEW_ICON} />Start: <strong>{settings.office_start_time?.slice(0, 5)}</strong></div>
+            <div><Clock size={13} style={PREVIEW_ICON} />End: <strong>{settings.office_end_time?.slice(0, 5)}</strong></div>
+            <div><AlertTriangle size={13} style={PREVIEW_ICON} />Late after: <strong>{settings.late_threshold_minutes} min</strong></div>
+            <div><Timer size={13} style={PREVIEW_ICON} />Min hours: <strong>{settings.min_working_hours} hours</strong></div>
+            <div><Calendar size={13} style={PREVIEW_ICON} />Work days: <strong>{getWorkingDaysDisplay()}</strong></div>
           </div>
           <div style={{ 
             marginTop: '0.75rem', 

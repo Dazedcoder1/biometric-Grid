@@ -233,7 +233,8 @@ const Today = () => {
           textAlign: 'center',
           color: '#6b7585'
         }}>
-          ⏱️ Min working hours required: {settings.min_working_hours}h 
+          <Clock size={13} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 5, opacity: 0.8 }} />
+          Min working hours required: {settings.min_working_hours}h
           (within {settings.office_start_time?.slice(0,5)} - {settings.office_end_time?.slice(0,5)})
         </div>
       )}

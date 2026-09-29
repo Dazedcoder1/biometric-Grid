@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
+import { Check, Timer, X } from 'lucide-react';
 import { employeeApi, tenantApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -137,9 +138,9 @@ const Attendance = () => {
                     </td>
                     <td>
                       {a.met_min_hours ? (
-                        <Badge type="present">✓ Yes</Badge>
+                        <Badge type="present"><Check size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Yes</Badge>
                       ) : a.check_in ? (
-                        <Badge type="late">✗ No</Badge>
+                        <Badge type="late"><X size={11} style={{ verticalAlign: -1, marginRight: 3 }} />No</Badge>
                       ) : (
                         <span style={{ fontSize: '0.7rem', color: '#6b7585' }}>—</span>
                       )}
@@ -155,7 +156,8 @@ const Attendance = () => {
 
       {settings && (
         <div style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: 'rgba(245,158,11,0.05)', borderRadius: '8px', fontSize: '0.7rem', textAlign: 'center' }}>
-          ⏱️ Minimum working hours required: {settings.min_working_hours}h (within office hours)
+          <Timer size={13} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 5, opacity: 0.8 }} />
+          Minimum working hours required: {settings.min_working_hours}h (within office hours)
         </div>
       )}
     </DashboardLayout>

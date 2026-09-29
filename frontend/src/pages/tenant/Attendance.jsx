@@ -6,8 +6,12 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
+import OfficeHoursFacts from '../../components/OfficeHoursFacts';
 import { tenantApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+
+// Shared inline-icon alignment for the summary row below the table.
+const ST = { verticalAlign: -2, marginRight: 5, opacity: 0.8 };
 
 const Attendance = () => {
   const { logout } = useAuth();
@@ -222,9 +226,7 @@ const Attendance = () => {
           gap: '0.5rem',
           fontSize: '0.75rem'
         }}>
-          <span>🕘 Office Hours: {settings.office_start_time?.slice(0,5)} - {settings.office_end_time?.slice(0,5)}</span>
-          <span>⚠️ Late after: +{settings.late_threshold_minutes} min</span>
-          <span>⏱️ Min hours required: {settings.min_working_hours}h</span>
+          <OfficeHoursFacts settings={settings} />
         </div>
       )}
 
@@ -317,10 +319,10 @@ const Attendance = () => {
           gap: '0.5rem',
           fontSize: '0.75rem'
         }}>
-          <div>📊 Total: {attendance.length} employees</div>
-          <div>✅ Present: {stats.present}</div>
-          <div>❌ Absent: {stats.absent}</div>
-          <div>💪 Met min hours: {stats.met_minimum_hours}</div>
+          <div><Users size={13} style={ST} />Total: {attendance.length} employees</div>
+          <div><CheckCircle size={13} style={{ ...ST, color: 'var(--green)' }} />Present: {stats.present}</div>
+          <div><XCircle size={13} style={{ ...ST, color: 'var(--red)' }} />Absent: {stats.absent}</div>
+          <div><Clock size={13} style={ST} />Met min hours: {stats.met_minimum_hours}</div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text3)' }}>
             Min required: {settings?.min_working_hours || 9}h within office hours
           </div>

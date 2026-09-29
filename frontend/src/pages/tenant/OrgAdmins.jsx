@@ -58,7 +58,7 @@ const OrgAdmins = () => {
   const copyToClipboard = (text, fieldName) => {
     navigator.clipboard.writeText(text);
     setToast({ 
-      message: `📋 ${fieldName} copied to clipboard!`, 
+      message: `${fieldName} copied to clipboard`,
       type: 'info', 
       persistent: false 
     });

@@ -1,6 +1,6 @@
 // src/pages/tenant/DeviceCommands.jsx
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Cpu, Users, Fingerprint, Trash2, Send, AlertCircle, CheckCircle, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, Cpu, Users, Fingerprint, Trash2, Send, AlertCircle, CheckCircle, RefreshCw, Search, ClipboardList } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
 import { tenantApi } from '../../services/api';
@@ -179,7 +179,9 @@ const DeviceCommands = () => {
               <option value="">Choose a device</option>
               {devices.map(device => (
                 <option key={device.device_id} value={device.device_id}>
-                  {device.device_id} - {device.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+                  {/* Plain text: browsers render only text inside <option>, so
+                      an SVG icon here would silently disappear. */}
+                  {device.device_id} — {device.status === 'online' ? 'Online' : 'Offline'}
                 </option>
               ))}
             </select>
@@ -294,7 +296,10 @@ const DeviceCommands = () => {
 
       {/* Instructions */}
       <div className="card-box" style={{ marginTop: '1rem', background: 'rgba(168,85,247,0.05)' }}>
-        <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>📋 Instructions</h4>
+        <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+          <ClipboardList size={14} strokeWidth={1.75} style={{ verticalAlign: -2, marginRight: 6, opacity: 0.8 }} />
+          Instructions
+        </h4>
         <ul style={{ color: 'var(--text3)', fontSize: '0.8rem', marginLeft: '1rem', lineHeight: '1.6' }}>
           <li><strong>Enroll:</strong> Sends command to device to capture employee's fingerprint. Employee must scan finger on device after command is sent.</li>
           <li><strong>Delete:</strong> Removes fingerprint from device. Employee will no longer be able to mark attendance on that device.</li>

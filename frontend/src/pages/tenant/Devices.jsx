@@ -862,7 +862,8 @@ const Devices = () => {
                     Last seen: {formatLastSeen(device.last_seen)}
                     {!actuallyOnline && device.status === 'online' && (
                       <span style={{ color: '#f97316', marginLeft: 'auto', fontSize: '0.7rem' }}>
-                        ⚠️ Stale
+                        <AlertTriangle size={11} strokeWidth={2} style={{ verticalAlign: -1, marginRight: 4 }} />
+                        Stale
                       </span>
                     )}
                   </div>

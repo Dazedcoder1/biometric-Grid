@@ -416,7 +416,7 @@ const FireCommandModal = ({ isOpen, onClose, device, onSuccess }) => {
               <p className="form-hint">
                 {commandType === 'enroll' 
                   ? selectedEmployee?.finger_id 
-                    ? `⚠️ Employee already has Finger ID ${selectedEmployee.finger_id}. Enrolling a new ID will replace the existing one.`
+                    ? `Warning: employee already has Finger ID ${selectedEmployee.finger_id}. Enrolling a new ID will replace the existing one.`
                     : 'Enter a Finger ID between 1-127, or leave empty to auto-assign the next available slot'
                   : selectedEmployee?.finger_id 
                     ? `This will delete Finger ID ${selectedEmployee.finger_id} from the device`
