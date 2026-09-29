@@ -47,6 +47,12 @@ import TenantGitHubRepos from './pages/tenant/GitHubRepos';
 import OrgTasks from './pages/org/Tasks';
 import EmpTasks from './pages/employee/Tasks';
 
+// Credential Vault
+import VaultCredentials from './pages/vault/Credentials';
+import VaultCredentialDetail from './pages/vault/CredentialDetail';
+import VaultAuditLog from './pages/vault/AuditLog';
+import VaultDependencyMap from './pages/vault/DependencyMap';
+
 function App() {
   return (
     <ThemeProvider>
@@ -319,6 +325,51 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['employee', 'user']}>
                   <EmpTasks />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Credential Vault — every signed-in role has a personal vault.
+                What each can actually see is decided by permissions on the
+                server; this route only controls which roles get the screen. */}
+            <Route
+              path="/vault"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['employee', 'user', 'org_admin', 'department_admin', 'tenant_admin']}
+                >
+                  <VaultCredentials />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vault/credential/:id"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['employee', 'user', 'org_admin', 'department_admin', 'tenant_admin']}
+                >
+                  <VaultCredentialDetail />
+                </ProtectedRoute>
+              }
+            />
+            {/* The audit log is gated server-side on the `audit.view`
+                permission; this list only decides who gets the screen. */}
+            <Route
+              path="/vault/audit"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'org_admin']}>
+                  <VaultAuditLog />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/vault/dependencies"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['employee', 'user', 'org_admin', 'department_admin', 'tenant_admin']}
+                >
+                  <VaultDependencyMap />
                 </ProtectedRoute>
               }
             />

@@ -1,0 +1,222 @@
+// src/pages/vault/DependencyMap.jsx
+//
+// The org-wide dependency map: which credentials feed which systems.
+//
+// Drawn as a bipartite SVG — credentials in the left column, systems in the
+// right, links between. No graph library, because the data is bipartite by
+// construction: an edge always runs credential → system, never between two of
+// the same kind. A force-directed layout would spend its effort discovering
+// structure we already know, and produce something harder to read.
+//
+// Hovering a node dims everything unconnected, which is how you actually
+// answer "what does this touch" on a dense map.
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Network, Unlink } from 'lucide-react';
+
+import DashboardLayout from '../../layouts/DashboardLayout';
+import { vaultApi } from '../../services/api';
+
+const ROW = 34;
+const TOP = 30;
+const LEFT_X = 20;
+const RIGHT_X = 420;
+const NODE_W = 180;
+
+export default function DependencyMap() {
+  const [graph, setGraph] = useState(null);
+  const [error, setError] = useState('');
+  const [hover, setHover] = useState(null); // {type, id}
+
+  useEffect(() => {
+    vaultApi.dependencyGraph().then(setGraph).catch((e) => setError(e.message));
+  }, []);
+
+  const positions = useMemo(() => {
+    if (!graph) return { creds: {}, systems: {} };
+    const creds = {};
+    const systems = {};
+    graph.credentials.forEach((c, i) => { creds[c.id] = TOP + i * ROW; });
+    graph.systems.forEach((s, i) => { systems[s.id] = TOP + i * ROW; });
+    return { creds, systems };
+  }, [graph]);
+
+  // Which nodes and edges stay bright while hovering.
+  const active = useMemo(() => {
+    if (!graph || !hover) return null;
+    const creds = new Set();
+    const systems = new Set();
+    const edges = new Set();
+
+    graph.edges.forEach((e, i) => {
+      const match = hover.type === 'credential'
+        ? e.credential_id === hover.id
+        : e.system_id === hover.id;
+      if (match) {
+        creds.add(e.credential_id);
+        systems.add(e.system_id);
+        edges.add(i);
+      }
+    });
+    if (hover.type === 'credential') creds.add(hover.id);
+    else systems.add(hover.id);
+
+    return { creds, systems, edges };
+  }, [graph, hover]);
+
+  const dim = (on) => (active && !on ? 0.15 : 1);
+
+  const height = graph
+    ? TOP + Math.max(graph.credentials.length, graph.systems.length) * ROW + 20
+    : 200;
+
+  return (
+    <DashboardLayout
+      title="Dependency Map"
+      role="superadmin"
+      label="Security"
+      abbr="DM"
+      color="#0ea5e9"
+      bgColor="rgba(14,165,233,0.15)"
+    >
+      <style>{`
+        .dm-node { cursor:pointer; }
+        .dm-label { font-size:11px; fill:var(--text2); font-family:var(--mono); }
+        .dm-stat { flex:1; min-width:130px; padding:.7rem .9rem;
+          background:var(--bg2); border:1px solid var(--border);
+          border-radius:10px; }
+        .dm-head { font-family:var(--mono); font-size:.68rem;
+          text-transform:uppercase; opacity:.55; }
+      `}</style>
+
+      {error && (
+        <div style={{ padding: '.6rem .8rem', borderRadius: 8, marginBottom: '1rem',
+          background: 'rgba(239,68,68,.12)', fontSize: '.85rem' }}>
+          <AlertCircle size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
+          {error}
+        </div>
+      )}
+
+      {graph && (
+        <>
+          <div style={{ display: 'flex', gap: '.7rem', marginBottom: '1rem',
+            flexWrap: 'wrap' }}>
+            <div className="dm-stat">
+              <div className="dm-head">Credentials</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                {graph.stats.credentials}
+              </div>
+            </div>
+            <div className="dm-stat">
+              <div className="dm-head">Systems</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                {graph.stats.systems}
+              </div>
+            </div>
+            <div className="dm-stat">
+              <div className="dm-head">Links</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                {graph.stats.links}
+              </div>
+            </div>
+            <div className="dm-stat" style={{
+              borderColor: graph.stats.unmapped_credentials
+                ? 'rgba(245,158,11,.4)' : undefined }}>
+              <div className="dm-head">Unmapped</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 600,
+                color: graph.stats.unmapped_credentials ? '#f59e0b' : 'inherit' }}>
+                {graph.stats.unmapped_credentials}
+              </div>
+            </div>
+          </div>
+
+          {graph.stats.unmapped_credentials > 0 && (
+            <div style={{ padding: '.6rem .8rem', borderRadius: 8,
+              marginBottom: '1rem', background: 'rgba(245,158,11,.1)',
+              fontSize: '.83rem' }}>
+              <Unlink size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
+              {graph.stats.unmapped_credentials} credential
+              {graph.stats.unmapped_credentials === 1 ? ' has' : 's have'} no
+              recorded dependencies. An unmapped credential is not a safe one —
+              it is one whose blast radius is unknown.
+            </div>
+          )}
+
+          <div className="card-box" style={{ overflowX: 'auto' }}>
+            <h4 style={{ margin: '0 0 .3rem', fontSize: '.95rem' }}>
+              <Network size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
+              Credentials → Systems
+            </h4>
+            <p style={{ fontSize: '.78rem', opacity: .65, marginTop: 0 }}>
+              Hover anything to isolate what it touches.
+            </p>
+
+            <svg width={RIGHT_X + NODE_W + 40} height={height}
+              style={{ minWidth: 640 }}>
+              {/* edges under nodes so they never cover a label */}
+              {graph.edges.map((e, i) => {
+                const y1 = positions.creds[e.credential_id];
+                const y2 = positions.systems[e.system_id];
+                if (y1 === undefined || y2 === undefined) return null;
+                const x1 = LEFT_X + NODE_W;
+                const x2 = RIGHT_X;
+                const mid = (x1 + x2) / 2;
+                return (
+                  <path
+                    key={i}
+                    d={`M ${x1} ${y1 + 11} C ${mid} ${y1 + 11}, ${mid} ${y2 + 11}, ${x2} ${y2 + 11}`}
+                    fill="none"
+                    stroke={active?.edges.has(i) ? '#0ea5e9' : 'var(--border)'}
+                    strokeWidth={active?.edges.has(i) ? 2 : 1}
+                    opacity={dim(active?.edges.has(i))}
+                  />
+                );
+              })}
+
+              {graph.credentials.map((c) => (
+                <g key={`c${c.id}`} className="dm-node"
+                  opacity={dim(active?.creds.has(c.id))}
+                  onMouseEnter={() => setHover({ type: 'credential', id: c.id })}
+                  onMouseLeave={() => setHover(null)}>
+                  <rect x={LEFT_X} y={positions.creds[c.id]} width={NODE_W} height={22}
+                    rx={6} fill="var(--bg3)"
+                    stroke={c.unmapped ? '#f59e0b' : 'var(--border)'} />
+                  <text className="dm-label" x={LEFT_X + 8}
+                    y={positions.creds[c.id] + 15}>
+                    {c.name.length > 22 ? `${c.name.slice(0, 21)}…` : c.name}
+                  </text>
+                </g>
+              ))}
+
+              {graph.systems.map((s) => {
+                const prod = (s.environment || '').toLowerCase().startsWith('prod');
+                return (
+                  <g key={`s${s.id}`} className="dm-node"
+                    opacity={dim(active?.systems.has(s.id))}
+                    onMouseEnter={() => setHover({ type: 'system', id: s.id })}
+                    onMouseLeave={() => setHover(null)}>
+                    <rect x={RIGHT_X} y={positions.systems[s.id]} width={NODE_W}
+                      height={22} rx={6}
+                      fill={prod ? 'rgba(239,68,68,.12)' : 'var(--bg3)'}
+                      stroke={prod ? 'rgba(239,68,68,.5)' : 'var(--border)'} />
+                    <text className="dm-label" x={RIGHT_X + 8}
+                      y={positions.systems[s.id] + 15}>
+                      {s.name.length > 20 ? `${s.name.slice(0, 19)}…` : s.name}
+                      {s.environment ? ` (${s.environment.slice(0, 4)})` : ''}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+
+            {graph.credentials.length === 0 && (
+              <div style={{ padding: '1.5rem', opacity: .6, fontSize: '.85rem' }}>
+                No credentials yet.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </DashboardLayout>
+  );
+}

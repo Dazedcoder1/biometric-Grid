@@ -35,3 +35,12 @@ python-multipart==0.0.6
 httpx==0.25.2
 # Fernet encryption for GitHub tokens at rest (also pulled by python-jose above)
 cryptography>=41.0.0
+
+# --- Credential Security Platform, Phase 2 ---
+# TOTP (RFC 6238) for step-up re-authentication. The de facto Python
+# implementation; handles clock-drift windows correctly. Writing this by hand
+# would be custom cryptography, which the project rules forbid.
+pyotp==2.9.0
+
+# Development and test dependencies live in requirements-dev.txt so the
+# production image does not ship a test runner.

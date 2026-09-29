@@ -1,0 +1,22 @@
+# Development and test dependencies.
+#
+#     pip install -r requirements.txt -r requirements-dev.txt
+#
+# Deliberately NOT installed by backend/Dockerfile: a production image should
+# not contain a test runner, and every extra package is more attack surface on
+# a host that decrypts credentials.
+
+# Test runner. pytest-asyncio in "auto" mode (see pyproject.toml) means async
+# tests need no per-test decorator.
+pytest==8.3.3
+pytest-asyncio==0.24.0
+
+# Lint and format in one tool, replacing flake8 + black + isort and the job of
+# keeping those three agreeing with each other.
+ruff==0.6.9
+
+# Async SQLite driver, for integration tests that want a real database engine
+# without a network round-trip to Neon. Note that tests touching Postgres
+# features — JSONB, advisory locks, partial indexes — must run against
+# Postgres and are marked `integration`.
+aiosqlite==0.20.0

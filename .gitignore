@@ -37,4 +37,11 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Internal design and working documents — kept local, not shared.
+# README.md and backend/SETUP.md are deliberately NOT here: without them a
+# fresh clone has no instructions for running anything.
+docs/
+PROGRESS.md
+*.docx
 .neon

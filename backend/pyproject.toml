@@ -1,0 +1,63 @@
+# Tooling config only — the project is installed from requirements.txt, not as
+# a package, so there is no [project] table here.
+
+[tool.ruff]
+# Ruff covers linting and formatting in one tool, so there is no flake8 +
+# black + isort combination to keep in agreement with each other.
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "alembic/versions", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes — unused imports and names
+    "I",         # isort — import ordering
+    "B",         # bugbear — likely bugs
+    "S",         # bandit — security
+    "UP",        # pyupgrade
+    "C4",        # comprehensions
+]
+ignore = [
+    "E501",      # line length is the formatter's job
+    "B008",      # FastAPI's Depends() in defaults is the documented idiom
+    "UP038",     # isinstance(x, (list, tuple)) reads fine and works on every
+                 # version; `list | tuple` is a preference, not an improvement
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, use fixed values, and construct fake secrets on purpose.
+"tests/*" = ["S101", "S105", "S106", "S311"]
+# Migrations are generated and print progress deliberately.
+"alembic/versions/*" = ["E402", "F401", "T201"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Put the backend root on sys.path so `import app...` resolves.
+#
+# Without this, pytest inserts the *test file's* directory (tests/) instead,
+# because there is no __init__.py there — and `app` is then invisible. The
+# alternative fixes are an __init__.py in tests/ (which makes them a package
+# and changes collection semantics) or installing the project with `pip
+# install -e .` (which needs packaging metadata this project does not have).
+# Relative to rootdir, which is this file's directory.
+pythonpath = ["."]
+
+asyncio_mode = "auto"
+
+# Silences a pytest-asyncio deprecation warning and pins current behaviour:
+# each async test gets its own event loop. Leaving it unset means the default
+# changes under us on a future upgrade.
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # Surfaces the datetime.utcnow() deprecations rather than hiding them.
+    "default::DeprecationWarning",
+]
+markers = [
+    "integration: needs a live database (deselect with '-m \"not integration\"')",
+]

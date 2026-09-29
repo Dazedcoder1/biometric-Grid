@@ -23,14 +23,22 @@ async def lifespan(app: FastAPI):
     from app.services.github_service import reconcile_loop
     github_task = asyncio.create_task(reconcile_loop())
 
+    # Marks expired shares and writes "access expired" to the audit log.
+    # It does NOT enforce expiry — every access query already filters on
+    # expires_at, so a dead sweeper means late log entries, not leaked access.
+    from app.services.share_sweeper import expiry_loop
+    share_task = asyncio.create_task(expiry_loop())
+
     yield
 
     logger.info("Shutting down...")
-    github_task.cancel()
-    try:
-        await github_task
-    except asyncio.CancelledError:
-        pass
+    for task in (github_task, share_task):
+        task.cancel()
+    for task in (github_task, share_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     mqtt_manager.stop()
 
 
@@ -145,6 +153,25 @@ app.include_router(emp_tasks_router,     prefix=EMP_PREFIX,    tags=["Tasks - Em
 
 # Unauthenticated by necessity — every request is HMAC-verified inside.
 app.include_router(github_webhook_router, prefix="/api/webhooks", tags=["Webhooks"])
+
+# ─── Credential vault ─────────────────────────────────────────────────────────
+# Authorisation is per-route via app/api/deps_security.py, not a blanket
+# dependency here: reveal needs step-up, the rest do not, and burying that
+# distinction in a router-level guard would hide it.
+from app.api.routes.vault.activity import router as vault_activity_router
+from app.api.routes.vault.credentials import router as vault_credentials_router
+from app.api.routes.vault.dependencies import router as vault_dependencies_router
+from app.api.routes.vault.mfa import router as vault_mfa_router
+from app.api.routes.vault.security import router as vault_security_router
+from app.api.routes.vault.shares import router as vault_shares_router
+
+VAULT_PREFIX = "/api/vault"
+app.include_router(vault_mfa_router, prefix=VAULT_PREFIX, tags=["Vault - MFA"])
+app.include_router(vault_credentials_router, prefix=VAULT_PREFIX, tags=["Vault - Credentials"])
+app.include_router(vault_shares_router, prefix=VAULT_PREFIX, tags=["Vault - Sharing"])
+app.include_router(vault_activity_router, prefix=VAULT_PREFIX, tags=["Vault - Activity & Audit"])
+app.include_router(vault_security_router, prefix=VAULT_PREFIX, tags=["Vault - Security & Rotation"])
+app.include_router(vault_dependencies_router, prefix=VAULT_PREFIX, tags=["Vault - Dependencies"])
 
 
 # ─── Global error handler ─────────────────────────────────────────────────────

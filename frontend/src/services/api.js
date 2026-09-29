@@ -67,10 +67,20 @@ async function apiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(describeApiError(error, response.status));
+    const err = new Error(describeApiError(error, response.status));
+    // Carried through so callers can react to specific failures — the reveal
+    // flow needs to distinguish "re-authenticate" from a general 401.
+    err.status = response.status;
+    err.stepUpRequired = response.headers.get('X-Step-Up-Required');
+    throw err;
   }
 
-  return response.json();
+  // 204 and other empty bodies: calling .json() on them throws, which would
+  // turn a successful DELETE into an error.
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return null;
+  }
+  return response.json().catch(() => null);
 }
 
 // FastAPI reports validation failures as a LIST of objects under `detail`.
@@ -328,6 +338,162 @@ export const authApi = {
   changePassword: (data) => apiRequest('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
   setPassword: (data) => apiRequest('/api/auth/set-password', { method: 'POST', body: JSON.stringify(data) }),
   createSuperAdmin: (data) => apiRequest('/api/auth/setup/super-admin', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ─── Credential vault ────────────────────────────────────────────────────────
+// Reveal is the only call taking a step-up token. It goes in a header rather
+// than the body because it authorises the request, not the payload — and a
+// header stays out of any JSON request logging.
+
+export const vaultApi = {
+  // MFA
+  mfaStatus: () => apiRequest('/api/vault/mfa/status'),
+  beginEnrolment: (label) =>
+    apiRequest('/api/vault/mfa/enrol', {
+      method: 'POST',
+      body: JSON.stringify({ label: label || null }),
+    }),
+  confirmEnrolment: (code) =>
+    apiRequest('/api/vault/mfa/enrol/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+  stepUp: (code, purpose = 'credential.reveal') =>
+    apiRequest('/api/vault/mfa/step-up', {
+      method: 'POST',
+      body: JSON.stringify({ code, purpose }),
+    }),
+
+  // Vaults and racks
+  vaults: () => apiRequest('/api/vault/vaults'),
+  createRack: (vaultId, data) =>
+    apiRequest(`/api/vault/racks?vault_id=${vaultId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Credentials
+  list: ({ rackId, search } = {}) => {
+    const q = new URLSearchParams();
+    if (rackId) q.set('rack_id', rackId);
+    if (search) q.set('search', search);
+    const qs = q.toString();
+    return apiRequest(`/api/vault/credentials${qs ? `?${qs}` : ''}`);
+  },
+  create: (data) =>
+    apiRequest('/api/vault/credentials', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) =>
+    apiRequest(`/api/vault/credentials/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  rotate: (id, data) =>
+    apiRequest(`/api/vault/credentials/${id}/rotate`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  remove: (id) => apiRequest(`/api/vault/credentials/${id}`, { method: 'DELETE' }),
+
+  reveal: (id, stepUpToken) =>
+    apiRequest(`/api/vault/credentials/${id}/reveal`, {
+      method: 'POST',
+      headers: { 'X-Step-Up-Token': stepUpToken },
+    }),
+
+  // Copying cannot be prevented — anyone who can see a secret can retype it.
+  // This records that it happened, which is the honest half of the promise.
+  recordCopy: (id) =>
+    apiRequest(`/api/vault/credentials/${id}/copied`, { method: 'POST' }),
+
+  // Sharing
+  sharedWithMe: () => apiRequest('/api/vault/shared-with-me'),
+  shareTree: (credentialId) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/shares`),
+  share: (credentialId, data) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/shares`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  revokeShare: (shareId, reason) =>
+    apiRequest(`/api/vault/shares/${shareId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason: reason || null }),
+    }),
+
+  // Security scoring and rotation policy
+  security: (credentialId) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/security`),
+  securityOverview: (severity) =>
+    apiRequest(`/api/vault/security/overview${severity ? `?severity=${severity}` : ''}`),
+  thresholds: () => apiRequest('/api/vault/security/thresholds'),
+  createPolicy: (data) =>
+    apiRequest('/api/vault/security/rotation-policies', {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+
+  // Dependencies
+  systems: () => apiRequest('/api/vault/systems'),
+  dependencies: (credentialId) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/dependencies`),
+  addDependency: (credentialId, data) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/dependencies`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  removeDependency: (dependencyId) =>
+    apiRequest(`/api/vault/dependencies/${dependencyId}`, { method: 'DELETE' }),
+  dependencyGraph: () => apiRequest('/api/vault/dependency-graph'),
+
+  // What breaks if this is rotated or revoked. Called BEFORE the action.
+  impact: (credentialId, action = 'rotate') =>
+    apiRequest(`/api/vault/credentials/${credentialId}/impact?action=${action}`),
+
+  // Activity and audit
+  activity: (credentialId) =>
+    apiRequest(`/api/vault/credentials/${credentialId}/activity`),
+  auditLog: (filters = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') q.set(k, v);
+    });
+    const qs = q.toString();
+    return apiRequest(`/api/vault/audit${qs ? `?${qs}` : ''}`);
+  },
+  auditActions: () => apiRequest('/api/vault/audit/actions'),
+  auditSummary: (days = 7) => apiRequest(`/api/vault/audit/summary?days=${days}`),
+  auditIntegrity: () => apiRequest('/api/vault/audit/integrity'),
+
+  /**
+   * Download the audit CSV.
+   *
+   * Fetched rather than linked: a plain <a href> carries no Authorization
+   * header, so the request would arrive unauthenticated and 401. This pulls
+   * the file with credentials attached and hands the browser a blob.
+   */
+  downloadAudit: async (filters = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') q.set(k, v);
+    });
+
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(
+      `${API_BASE_URL}/api/vault/audit/export.csv?${q.toString()}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    );
+    if (!response.ok) throw new Error(`Export failed (${response.status})`);
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Released on the next tick — revoking immediately can cancel the download
+    // in some browsers before it has started reading.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
 };
 
 export const publicApi = {

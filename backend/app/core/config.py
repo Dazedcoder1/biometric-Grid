@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     # Cap issues pulled per repo per reconcile, to stay inside rate limits.
     GITHUB_SYNC_PAGE_LIMIT: int = 3
 
+    # --- Credential vault: key management ---
+    # "mock"  -> local KEK from KMS_MOCK_KEY. Development only.
+    # "aws"   -> real AWS KMS via boto3, KMS_KEY_ID names the key.
+    # The interface is identical either way; only custody differs.
+    KMS_PROVIDER: str = "mock"
+    KMS_KEY_ID: str = "local-dev-kek-v1"
+    # 32 url-safe base64 bytes. Generate with:
+    #   python -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+    KMS_MOCK_KEY: str = ""
+    AWS_REGION: str = "ap-south-1"
+
     model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
 settings = Settings()

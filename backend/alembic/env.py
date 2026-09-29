@@ -14,6 +14,12 @@ from app.core.config import settings
 from app.db.url import normalise
 from app.models.domain import Base
 
+# Imported for the side effect of registering their tables on Base.metadata.
+# Without this, `alembic revision --autogenerate` would see them as missing and
+# cheerfully write a migration that DROPS every one of them.
+from app.models import credentials as _credentials_models  # noqa: F401
+from app.models import security as _security_models  # noqa: F401
+
 config = context.config
 
 # Neon hands out a libpq URL that asyncpg cannot use as-is; normalise() fixes

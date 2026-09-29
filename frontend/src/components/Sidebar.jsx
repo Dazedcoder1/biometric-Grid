@@ -19,7 +19,10 @@ import {
   Send,
   Briefcase,
   CheckSquare,
-  CodeSquare as Github
+  CodeSquare as Github,
+  KeyRound,
+  Network,
+  ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -43,6 +46,13 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <Github size={18} />, label: 'GitHub Repos', path: '/super/github-repos' },
           { icon: <Key size={18} />, label: 'Change API Key', path: '/super/change-api-key' },
           { icon: <Settings size={18} />, label: 'Settings', path: '/super/settings' },
+          // Credential vault. Tenant Admin can manage credentials and read the
+          // audit log, but cannot reveal secrets — that role authenticates by
+          // API key with no second factor. ARCHITECTURE.md §5.
+          { section: 'Credential Vault' },
+          { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
+          { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
+          { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
         ];
       case 'orgadmin':
         return [
@@ -57,6 +67,10 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <CheckSquare size={18} />, label: 'Tasks', path: '/org/tasks' },
           { icon: <Monitor size={18} />, label: 'Activity Tracker', path: '/org/tracker' },
           { icon: <Lock size={18} />, label: 'Change Password', path: '/org/change-password' },
+          { section: 'Credential Vault' },
+          { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
+          { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
+          { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
         ];
       case 'user':
         return [
@@ -66,6 +80,11 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <CheckSquare size={18} />, label: 'My Tasks', path: '/emp/tasks' },
           { icon: <Calendar size={18} />, label: 'Holidays', path: '/emp/holidays' },
           { icon: <UserCircle size={18} />, label: 'Profile', path: '/emp/profile' },
+          // Employees get the vault and the dependency map, but not the audit
+          // log — that needs `audit.view`, which their role does not carry.
+          { section: 'Credential Vault' },
+          { icon: <KeyRound size={18} />, label: 'My Vault', path: '/vault' },
+          { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
         ];
       default:
         return [];
@@ -88,14 +107,33 @@ const Sidebar = ({ role, label, iconColor }) => {
       
       <div style={{ flex: 1, padding: '0.5rem 0' }}>
         {navItems.map((item, idx) => (
-          <NavLink 
-            key={idx} 
-            to={item.path} 
-            className={({ isActive }) => `sb-item ${isActive ? `active ${role === 'superadmin' ? 'super' : role === 'user' ? 'emp' : ''}` : ''}`}
-          >
-            <span className="sb-icon">{item.icon}</span>
-            {item.label}
-          </NavLink>
+          // A `section` entry is a heading, not a link. Handled here rather
+          // than by splitting the array so each role's menu stays one ordered
+          // list that reads in the order it renders.
+          item.section ? (
+            <div
+              key={idx}
+              style={{
+                padding: '1rem 1.1rem 0.35rem',
+                fontSize: '0.64rem',
+                letterSpacing: '0.09em',
+                textTransform: 'uppercase',
+                opacity: 0.45,
+                fontFamily: 'var(--mono)',
+              }}
+            >
+              {item.section}
+            </div>
+          ) : (
+            <NavLink
+              key={idx}
+              to={item.path}
+              className={({ isActive }) => `sb-item ${isActive ? `active ${role === 'superadmin' ? 'super' : role === 'user' ? 'emp' : ''}` : ''}`}
+            >
+              <span className="sb-icon">{item.icon}</span>
+              {item.label}
+            </NavLink>
+          )
         ))}
       </div>
 
