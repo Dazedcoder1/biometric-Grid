@@ -303,10 +303,15 @@ export const tenantApi = {
 };
 
 // ==================== SUPER ADMIN APIs ====================
+// Platform level: these act on organisations from outside them, so they never
+// carry X-Acting-Tenant-Id (only /api/tenant/* does — see pickAuthHeaders).
 export const superAdminApi = {
+  getOverview: () => apiRequest('/api/super/overview'),
   getTenants: () => apiRequest('/api/super/tenants'),
+  /** { name, admin_name, admin_email, admin_password, department? } */
   createTenant: (data) => apiRequest('/api/super/tenants', { method: 'POST', body: JSON.stringify(data) }),
   getTenantDetails: (id) => apiRequest(`/api/super/tenants/${id}`),
+  renameTenant: (id, name) => apiRequest(`/api/super/tenants/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   resetTenantApiKey: (id) => apiRequest(`/api/super/tenants/${id}/reset-api-key`, { method: 'PATCH' }),
   deleteTenant: (id) => apiRequest(`/api/super/tenants/${id}`, { method: 'DELETE' }),
 };

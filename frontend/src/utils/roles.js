@@ -52,6 +52,32 @@ export function homePathFor(role) {
 }
 
 /**
+ * Is this the platform operator?
+ *
+ * A Super Admin is routed as a tenant_admin — they use the same screens once
+ * they have picked an organisation — so `user.role` cannot tell them apart.
+ * `originalRole` is the unnormalised value from the token and can.
+ */
+export function isSuperAdmin(user) {
+  return user?.originalRole === 'super_admin';
+}
+
+/** The platform home: every organisation, before choosing one to work in. */
+export const PLATFORM_HOME = '/platform/organisations';
+
+/**
+ * Where this person belongs, when the role alone is not enough.
+ *
+ * Prefer this over homePathFor wherever a user object is to hand. A Super
+ * Admin sent to the tenant dashboard has no organisation selected yet, so the
+ * dashboard bounces them to the chooser — two redirects to arrive somewhere
+ * less useful than the platform screen, which is where they start.
+ */
+export function homePathForUser(user) {
+  return isSuperAdmin(user) ? PLATFORM_HOME : homePathFor(user?.role);
+}
+
+/**
  * Decode a JWT payload without verifying it.
  *
  * Verification is the server's job and only the server can do it — it holds

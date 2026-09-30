@@ -4,10 +4,29 @@ import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
 import { tenantApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { isSuperAdmin } from '../utils/roles';
 
-const DashboardLayout = ({ children, title, role, label, abbr, color, bgColor }) => {
+// How a Super Admin is shown, wherever they are. Every tenant screen passes
+// label="Tenant Admin" because that is who it was written for; a Super Admin
+// working inside an organisation uses those same screens, and was being told
+// they were its Tenant Admin. Overridden here, once, rather than in fourteen
+// pages. A distinct colour too: acting inside someone else's organisation
+// should never be mistaken for being its admin.
+const SUPER_ADMIN_IDENTITY = {
+  label: 'Super Admin',
+  abbr: 'SA',
+  color: '#ec4899',
+  bgColor: 'rgba(236,72,153,0.15)',
+};
+
+const DashboardLayout = ({ children, title, role, label: labelProp, abbr: abbrProp, color: colorProp, bgColor: bgColorProp }) => {
   const { user, authType } = useAuth();
   const [tenantId, setTenantId] = useState(null);
+
+  const identity = isSuperAdmin(user)
+    ? SUPER_ADMIN_IDENTITY
+    : { label: labelProp, abbr: abbrProp, color: colorProp, bgColor: bgColorProp };
+  const { label, abbr, color, bgColor } = identity;
 
   // Fetch tenant ID for tenant admin
   useEffect(() => {

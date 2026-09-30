@@ -1,7 +1,7 @@
 // src/components/Sidebar.jsx
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Building2, ChevronsUpDown, Key, Lock, LogOut, Monitor } from 'lucide-react';
+import { Building2, ChevronsUpDown, Key, LayoutGrid, Lock, LogOut, Monitor } from 'lucide-react';
 import { 
   BarChart3, 
   Calendar, 
@@ -26,12 +26,53 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getActingTenantName } from '../services/api';
+import { isSuperAdmin, PLATFORM_HOME } from '../utils/roles';
+
+// The tenant screens, shared by a Tenant Admin and by a Super Admin working
+// inside an organisation.
+const TENANT_ITEMS = [
+  { icon: <BarChart3 size={18} />, label: 'Dashboard', path: '/super/dashboard' },
+  { icon: <Users size={18} />, label: 'Employees', path: '/super/employees' },
+  { icon: <Package size={18} />, label: 'Departments', path: '/super/departments' },
+  { icon: <Shield size={18} />, label: 'Org Admins', path: '/super/org-admins' },
+  { icon: <Clock size={18} />, label: 'Attendance', path: '/super/attendance' },
+  { icon: <Briefcase size={18} />, label: 'Leaves', path: '/super/leaves' },
+  { icon: <Calendar size={18} />, label: 'Holidays', path: '/super/holidays' },
+  { icon: <Cpu size={18} />, label: 'Devices', path: '/super/devices' },
+  { icon: <Send size={18} />, label: 'Device Commands', path: '/super/device-commands' },
+  { icon: <CheckSquare size={18} />, label: 'Tasks', path: '/super/tasks' },
+  { icon: <Github size={18} />, label: 'GitHub Repos', path: '/super/github-repos' },
+  { icon: <Settings size={18} />, label: 'Settings', path: '/super/settings' },
+];
 
 const Sidebar = ({ role, label, iconColor }) => {
   const actingTenantName = getActingTenantName();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const superAdmin = isSuperAdmin(user);
 
   const getNavItems = () => {
+    // The platform operator. Their own screens come first; the organisation's
+    // screens appear only once one is chosen, since every one of them is
+    // scoped to it and would otherwise just bounce to the chooser.
+    //
+    // Two things a Tenant Admin has that a Super Admin does not:
+    //  * the vault — personal credentials inside one organisation, scoped to
+    //    the caller's own tenant, which a Super Admin does not have;
+    //  * Change API Key — rotation lives on the Organisations screen, which
+    //    issues the key, shows it once and audits it. One place, not two.
+    if (role === 'superadmin' && superAdmin) {
+      const items = [
+        { section: 'Platform' },
+        { icon: <LayoutGrid size={18} />, label: 'Organisations', path: PLATFORM_HOME },
+      ];
+      if (actingTenantName) {
+        items.push({ section: 'Organisation' }, ...TENANT_ITEMS);
+      } else {
+        items.push({ icon: <Building2 size={18} />, label: 'Choose organisation', path: '/choose-organisation' });
+      }
+      return items;
+    }
+
     switch (role) {
       case 'superadmin':
         return [
@@ -115,7 +156,7 @@ const Sidebar = ({ role, label, iconColor }) => {
           permanently matters here: every screen below is scoped to this
           organisation, and acting on the wrong one is an easy mistake to make
           and a hard one to notice. */}
-      {actingTenantName && (
+      {superAdmin && actingTenantName && (
         <Link
           to="/choose-organisation"
           style={{

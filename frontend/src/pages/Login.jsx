@@ -21,7 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { authApi } from '../services/api';
-import { homePathFor } from '../utils/roles';
+import { homePathForUser, isSuperAdmin } from '../utils/roles';
 
 /**
  * Where to land after a successful sign-in.
@@ -33,15 +33,20 @@ import { homePathFor } from '../utils/roles';
  * plain in-app path is ignored outright, so a crafted `from` cannot turn this
  * into an open redirect.
  */
-function destinationFor(role, from) {
-  const home = homePathFor(role);
+function destinationFor(user, from) {
+  const home = homePathForUser(user);
   if (typeof from !== 'string') return home;
   // Must be a single-slash absolute path: "//evil.com" and "https://evil.com"
   // are both rejected here.
   if (!/^\/[^/]/.test(from)) return home;
 
   const section = (path) => path.split('/')[1];
-  return section(from) === section(home) || section(from) === 'vault' ? from : home;
+  // A Super Admin works across the platform screens and, once an organisation
+  // is chosen, the tenant screens — but has no vault (see ProtectedRoute).
+  const allowed = isSuperAdmin(user)
+    ? ['platform', 'super', 'choose-organisation']
+    : [section(home), 'vault'];
+  return allowed.includes(section(from)) ? from : home;
 }
 
 export default function Login() {
@@ -59,7 +64,7 @@ export default function Login() {
   // Already signed in — go where this person belongs rather than showing them
   // a form they do not need.
   useEffect(() => {
-    if (!loading && user) navigate(homePathFor(user.role), { replace: true });
+    if (!loading && user) navigate(homePathForUser(user), { replace: true });
   }, [user, loading, navigate]);
 
   const handleSubmit = async (e) => {
@@ -71,7 +76,7 @@ export default function Login() {
       const res = await authApi.login(identifier.trim(), password);
       const signedIn = login(res.access_token, { refreshToken: res.refresh_token });
 
-      navigate(destinationFor(signedIn.role, location.state?.from), { replace: true });
+      navigate(destinationFor(signedIn, location.state?.from), { replace: true });
     } catch (err) {
       // The server does not say which half was wrong, and neither do we: an
       // error that distinguishes "no such user" from "wrong password" confirms

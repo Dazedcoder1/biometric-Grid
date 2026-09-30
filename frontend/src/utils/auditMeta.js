@@ -8,7 +8,7 @@
 // only decides the icon and the colour.
 
 import {
-  Database, FileDown, KeyRound, Network, ShieldCheck, Users,
+  Building2, Database, FileDown, KeyRound, Network, ShieldCheck, Users,
 } from 'lucide-react';
 
 export const CATEGORY_META = {
@@ -17,6 +17,9 @@ export const CATEGORY_META = {
   auth:       { icon: ShieldCheck, label: 'Sign-in',    tint: '#a855f7' },
   structure:  { icon: Network,     label: 'Structure',  tint: 'var(--text3)' },
   audit:      { icon: FileDown,    label: 'Audit',      tint: 'var(--warn)' },
+  // A Super Admin acting on the organisation from outside it — created,
+  // renamed, key rotated. Rare, and worth being able to spot at a glance.
+  platform:   { icon: Building2,   label: 'Platform',   tint: '#f472b6' },
   other:      { icon: Database,    label: 'Other',      tint: 'var(--text3)' },
 };
 

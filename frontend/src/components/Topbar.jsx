@@ -8,10 +8,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { employeeApi, notificationsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { isSuperAdmin } from '../utils/roles';
 
 const Topbar = ({ title, userAbbr, bgColor, iconColor, role }) => {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const superAdmin = isSuperAdmin(user);
   const navigate = useNavigate();
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -317,19 +319,26 @@ const Topbar = ({ title, userAbbr, bgColor, iconColor, role }) => {
               <div className="user-dropdown-info">
                 <div className="user-dropdown-name">{user?.name || 'User'}</div>
                 <div className="user-dropdown-role">
-                  {role === 'superadmin' ? 'Tenant Admin' : role === 'orgadmin' ? 'Org Admin' : 'Employee'}
+                  {superAdmin
+                    ? 'Super Admin'
+                    : role === 'superadmin' ? 'Tenant Admin' : role === 'orgadmin' ? 'Org Admin' : 'Employee'}
                 </div>
               </div>
             </div>
             <div className="user-dropdown-divider"></div>
-            <Link 
-              to={getProfilePath()} 
-              className="user-dropdown-item" 
-              onClick={() => setShowUserMenu(false)}
-            >
-              <User size={16} />
-              <span>Profile</span>
-            </Link>
+            {/* A Super Admin's account is not part of any organisation, so the
+                tenant profile page would show whichever one they happen to be
+                working in as if it were theirs. They get no Profile entry. */}
+            {!superAdmin && (
+              <Link
+                to={getProfilePath()}
+                className="user-dropdown-item"
+                onClick={() => setShowUserMenu(false)}
+              >
+                <User size={16} />
+                <span>Profile</span>
+              </Link>
+            )}
             <button 
               className="user-dropdown-item" 
               onClick={handleLogout}

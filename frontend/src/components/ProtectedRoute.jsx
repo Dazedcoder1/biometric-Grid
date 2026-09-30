@@ -2,20 +2,26 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { homePathFor } from '../utils/roles';
+import { homePathForUser, isSuperAdmin, PLATFORM_HOME } from '../utils/roles';
 import { getActingTenantId } from '../services/api';
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+/**
+ * @param allowedRoles    normalised roles that may open the screen
+ * @param superAdminOnly  platform screens: a Super Admin and nobody else. The
+ *                        role list cannot express this, because a Super Admin
+ *                        normalises to tenant_admin.
+ */
+const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
   const { user, token, authType, loading } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking authentication
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         background: 'var(--bg)',
         color: 'var(--text)'
@@ -43,7 +49,23 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to={homePathFor(user.role)} replace />;
+    return <Navigate to={homePathForUser(user)} replace />;
+  }
+
+  if (superAdminOnly && !isSuperAdmin(user)) {
+    return <Navigate to={homePathForUser(user)} replace />;
+  }
+
+  const superAdmin = isSuperAdmin(user);
+
+  // No vault for the platform operator. Every vault query is scoped to the
+  // caller's own organisation, and a Super Admin has none, so the screens
+  // showed empty lists and would have failed on the first save. And the vault
+  // holds people's credentials inside one organisation — not something the
+  // platform operator should be browsing. The sidebar hides the links; this
+  // covers a typed or bookmarked URL.
+  if (superAdmin && location.pathname.startsWith('/vault')) {
+    return <Navigate to={PLATFORM_HOME} replace />;
   }
 
   // A Super Admin has no organisation of their own, and every screen under
@@ -51,7 +73,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   // renders, fires its requests and shows an error — so send them to the
   // chooser first rather than letting them watch a dashboard fail.
   const needsOrganisation = (
-    user.originalRole === 'super_admin'
+    superAdmin
     && !getActingTenantId()
     && location.pathname.startsWith('/super')
   );

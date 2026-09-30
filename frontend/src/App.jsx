@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import ChooseOrganisation from './pages/super/ChooseOrganisation';
+import Organisations from './pages/super/Organisations';
 import ChangeApiKey from './pages/tenant/ChangeApiKey';
 import OrgTracker from './pages/org/Tracker';
 
@@ -68,14 +69,24 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
-            {/* Super Admins pick which organisation to administer. Protected,
-                but with no role list of its own: only a Super Admin is ever
-                sent here, and a tenant admin who types the URL is bounced to
-                their own dashboard by the redirect inside the page. */}
+            {/* ==================== PLATFORM (SUPER ADMIN) ==================== */}
+            {/* Every organisation, from above: create, rename, rotate keys,
+                delete when empty, and pick one to work in. Where a Super Admin
+                lands after signing in. */}
+            <Route
+              path="/platform/organisations"
+              element={(
+                <ProtectedRoute superAdminOnly>
+                  <Organisations />
+                </ProtectedRoute>
+              )}
+            />
+            {/* The quick switcher behind the organisation name in the sidebar,
+                and where /super/* sends a Super Admin with none chosen. */}
             <Route
               path="/choose-organisation"
               element={(
-                <ProtectedRoute allowedRoles={['tenant_admin']}>
+                <ProtectedRoute superAdminOnly>
                   <ChooseOrganisation />
                 </ProtectedRoute>
               )}

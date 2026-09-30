@@ -97,6 +97,14 @@ LABELS = {
 
     # the log itself
     "audit.exported": "exported the audit log",
+
+    # platform administration — a Super Admin acting on an organisation. Filed
+    # under that organisation, so its own admins see what was done to it.
+    "organisation.created": "created the organisation",
+    "organisation.renamed": "renamed the organisation",
+    "organisation.api_key_rotated": "issued the organisation a new API key",
+    "organisation.delete_refused": "tried to delete the organisation while it still held data",
+    "organisation.deleted": "deleted the organisation",
 }
 
 #: Namespace to category, so the viewer can group and colour rows without
@@ -113,6 +121,7 @@ CATEGORIES = {
     "dependency": "structure",
     "rotation_policy": "structure",
     "audit": "audit",
+    "organisation": "platform",
 }
 
 

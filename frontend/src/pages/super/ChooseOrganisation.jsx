@@ -1,30 +1,33 @@
 // src/pages/super/ChooseOrganisation.jsx
 //
-// Which organisation a Super Admin is administering.
+// Which organisation a Super Admin is administering — the quick switcher.
 //
 // A Super Admin belongs to the platform, not to a tenant — `users.tenant_id`
 // is NULL for these accounts by design. Every screen under /super is
-// tenant-scoped, so before the unified login there was nothing to scope them
-// to and the whole area answered with
+// tenant-scoped, so this picks the organisation those screens act on. The
+// choice is sent as X-Acting-Tenant-Id on every /api/tenant call and
+// re-checked server-side, so it is a convenience for the client rather than a
+// grant of access.
 //
-//     403  This admin is not attached to an organisation.
+// Creating, renaming and deleting organisations live on the platform screen
+// (/platform/organisations). This one only chooses.
 //
-// on every request. This screen supplies the missing piece. The choice is sent
-// as X-Acting-Tenant-Id on every /api/tenant call and re-checked server-side,
-// so it is a convenience for the client rather than a grant of access.
+// The route is superAdminOnly, so nobody else reaches this component.
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Building2, Check, LogOut, Search } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AlertCircle, Building2, Check, LayoutGrid, LogOut, Search } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { superAdminApi, setActingTenant, getActingTenantId } from '../../services/api';
+import { PLATFORM_HOME } from '../../utils/roles';
 // .v-btn and .v-banner started life in the vault but are plain utilities; this
 // screen uses them rather than growing a second set of the same rules.
 import '../vault/vault.css';
 
 export default function ChooseOrganisation() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user } = useAuth();
 
   const [tenants, setTenants] = useState(null);
@@ -32,13 +35,8 @@ export default function ChooseOrganisation() {
   const [filter, setFilter] = useState('');
 
   const current = getActingTenantId();
-  // Only a Super Admin can list organisations, and only they need to choose
-  // one. A tenant admin reaching this URL would otherwise see a 403 for
-  // something they have no business doing.
-  const isSuperAdmin = user?.originalRole === 'super_admin';
 
   useEffect(() => {
-    if (!isSuperAdmin) return undefined;
     let cancelled = false;
     superAdminApi.getTenants()
       .then((rows) => { if (!cancelled) setTenants(rows); })
@@ -46,20 +44,17 @@ export default function ChooseOrganisation() {
         if (!cancelled) setError(err.message || 'Could not load organisations.');
       });
     return () => { cancelled = true; };
-  }, [isSuperAdmin]);
-
-  useEffect(() => {
-    if (user && !isSuperAdmin) navigate('/super/dashboard', { replace: true });
-  }, [user, isSuperAdmin, navigate]);
-
-  if (user && !isSuperAdmin) return null;
+  }, []);
 
   const choose = (tenant) => {
     setActingTenant(tenant);
-    // Replace, not push: the chooser should not sit in history behind the
-    // dashboard, where Back would land on it again with a selection already
-    // made and no obvious reason for being there.
-    navigate('/super/dashboard', { replace: true });
+    // Back to the tenant screen they were heading for, if that is what brought
+    // them here; otherwise the dashboard. Replace, not push: the chooser should
+    // not sit in history behind the dashboard, where Back would land on it
+    // again with a selection already made and no obvious reason for being there.
+    const from = location.state?.from;
+    const target = typeof from === 'string' && from.startsWith('/super/') ? from : '/super/dashboard';
+    navigate(target, { replace: true });
   };
 
   const visible = (tenants || []).filter((t) =>
@@ -78,9 +73,8 @@ export default function ChooseOrganisation() {
             </div>
             <h2 className="login-title">Choose an organisation</h2>
             <p className="login-subtitle">
-              Signed in as {user?.name || user?.email || 'Super Admin'}. Your
-              account administers the platform, so pick which organisation to
-              work in — you can switch at any time.
+              Signed in as {user?.name || user?.email || 'Super Admin'}. Pick which
+              organisation to work in — you can switch at any time from the sidebar.
             </p>
           </div>
 
@@ -100,8 +94,8 @@ export default function ChooseOrganisation() {
           {tenants !== null && tenants.length === 0 && (
             <p style={{ fontSize: '.85rem', color: 'var(--text3)', textAlign: 'center',
               lineHeight: 1.5 }}>
-              There are no organisations yet. Create one with{' '}
-              <code>create_organisation.py</code> on the server, then come back.
+              There are no organisations yet.{' '}
+              <Link to={PLATFORM_HOME} style={{ color: 'var(--teal)' }}>Create the first one</Link>.
             </p>
           )}
 
@@ -115,19 +109,24 @@ export default function ChooseOrganisation() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 style={{ paddingLeft: 32, width: '100%' }}
+                aria-label="Filter organisations"
                 autoFocus
               />
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem',
+            maxHeight: '48vh', overflowY: 'auto' }}>
             {visible.map((t) => {
               const active = String(t.id) === String(current);
+              const s = t.stats || {};
+              const people = (s.employees || 0) + (s.org_admins || 0) + (s.tenant_admins || 0);
               return (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => choose(t)}
+                  aria-current={active ? 'true' : undefined}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '.6rem',
                     padding: '.7rem .85rem', borderRadius: 10, cursor: 'pointer',
@@ -137,11 +136,17 @@ export default function ChooseOrganisation() {
                   }}
                 >
                   <Building2 size={15} style={{ color: 'var(--text3)', flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontWeight: 500 }}>{t.name}</span>
-                  {/* The API key comes back on this endpoint but is never shown.
-                      Choosing an organisation does not require seeing its
-                      credential, and a list of keys on screen is a list of keys
-                      in a screenshot. */}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 500, overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.name}
+                    </span>
+                    <span style={{ display: 'block', fontSize: '.72rem', color: 'var(--text3)' }}>
+                      {people} {people === 1 ? 'person' : 'people'} · {s.devices || 0} device{s.devices === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                  {/* No API key here, not even the hint: choosing where to
+                      work does not involve the organisation's credential. */}
                   <span style={{ fontFamily: 'var(--mono)', fontSize: '.7rem',
                     color: 'var(--text3)' }}>
                     #{t.id}
@@ -158,14 +163,23 @@ export default function ChooseOrganisation() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={logout}
-            className="v-btn"
-            style={{ marginTop: '1.1rem', width: '100%', justifyContent: 'center' }}
-          >
-            <LogOut size={13} /> Sign out
-          </button>
+          <div style={{ display: 'flex', gap: '.5rem', marginTop: '1.1rem' }}>
+            <Link
+              to={PLATFORM_HOME}
+              className="v-btn"
+              style={{ flex: 1, justifyContent: 'center', textDecoration: 'none' }}
+            >
+              <LayoutGrid size={13} /> All organisations
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="v-btn"
+              style={{ flex: 1, justifyContent: 'center' }}
+            >
+              <LogOut size={13} /> Sign out
+            </button>
+          </div>
         </div>
       </div>
     </div>
