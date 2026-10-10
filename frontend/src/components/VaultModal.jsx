@@ -13,23 +13,38 @@
 // the cases people actually hit. If a trap is wanted later it belongs in a
 // library, not hand-rolled.
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 export default function VaultModal({ title, onClose, children, labelledBy }) {
   const dialogRef = useRef(null);
   const headingId = labelledBy || 'v-modal-title';
 
-  // Stored so focus can go back where it came from. Without this, dismissing a
-  // modal drops focus onto <body> and a keyboard user restarts from the top of
-  // the page.
-  const restoreTo = useRef(null);
+  // The latest onClose, without making it a reason to re-run the setup below.
+  //
+  // Every caller passes an inline arrow, so onClose is a new function on every
+  // render of the page. The setup effect used to depend on it — so each
+  // keystroke in a field inside the dialog re-rendered the page, re-ran the
+  // setup, and moved focus back onto the dialog box. Typing a six-digit code
+  // meant clicking back into the field after every digit.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
+  // Where focus was before the dialog opened, so closing it can go back there
+  // — otherwise focus drops onto <body> and a keyboard user restarts from the
+  // top of the page. Captured on the first render, before anything inside the
+  // dialog (an autoFocus field) has taken focus.
+  const [restoreTo] = useState(() => document.activeElement);
+
+  // Once, when the dialog opens.
   useEffect(() => {
-    restoreTo.current = document.activeElement;
-    dialogRef.current?.focus();
+    // Respect an autoFocus field inside the dialog: only take focus ourselves
+    // if nothing in here has it. Focusing the dialog box unconditionally stole
+    // the cursor from the very field the dialog exists to fill in.
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
 
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current(); };
     document.addEventListener('keydown', onKey);
 
     // The page behind must not scroll while a modal is open — on touch it is
@@ -40,9 +55,9 @@ export default function VaultModal({ title, onClose, children, labelledBy }) {
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
-      if (restoreTo.current instanceof HTMLElement) restoreTo.current.focus();
+      if (restoreTo instanceof HTMLElement && document.contains(restoreTo)) restoreTo.focus();
     };
-  }, [onClose]);
+  }, [restoreTo]);
 
   // Only a click that both starts and ends on the backdrop closes. Checking
   // e.target alone closes the dialog when a drag-select of the text inside it

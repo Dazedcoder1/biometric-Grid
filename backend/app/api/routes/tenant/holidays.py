@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from pydantic import BaseModel
@@ -31,26 +32,39 @@ async def list_holidays(year: int = None, tenant: Tenant = Depends(verify_tenant
     return result.mappings().all()
 
 @router.post('/holidays')
-async def create_holiday(data: HolidayCreate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def create_holiday(data: HolidayCreate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     await db.execute(text("INSERT INTO holidays (tenant_id, name, holiday_date, description) VALUES (:tenant_id, :name, :holiday_date, :description)"),
         {"tenant_id": tenant.id, "name": data.name, "holiday_date": data.holiday_date, "description": data.description})
+    await activity.log(
+        db, request, action="holiday.created", tenant_id=tenant.id, target_type="holiday",
+        details={"name": data.name, "date": data.holiday_date.isoformat()},
+    )
     await db.commit()
     return {"message": "Holiday created"}
 
 @router.put('/holidays/{holiday_id}')
-async def update_holiday(holiday_id: int, data: HolidayUpdate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def update_holiday(holiday_id: int, data: HolidayUpdate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("UPDATE holidays SET name=:name, holiday_date=:holiday_date, description=:description WHERE holiday_id=:holiday_id AND tenant_id=:tenant_id"),
         {"holiday_id": holiday_id, "tenant_id": tenant.id, "name": data.name, "holiday_date": data.holiday_date, "description": data.description})
     if result.rowcount == 0:
         raise HTTPException(404, "Holiday not found")
+    await activity.log(
+        db, request, action="holiday.updated", tenant_id=tenant.id,
+        target_type="holiday", target_id=holiday_id,
+        details={"name": data.name, "date": data.holiday_date.isoformat()},
+    )
     await db.commit()
     return {"message": "Holiday updated"}
 
 @router.delete('/holidays/{holiday_id}')
-async def delete_holiday(holiday_id: int, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def delete_holiday(holiday_id: int, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("DELETE FROM holidays WHERE holiday_id=:holiday_id AND tenant_id=:tenant_id"), {"holiday_id": holiday_id, "tenant_id": tenant.id})
     if result.rowcount == 0:
         raise HTTPException(404, "Holiday not found")
+    await activity.log(
+        db, request, action="holiday.deleted", tenant_id=tenant.id,
+        target_type="holiday", target_id=holiday_id,
+    )
     await db.commit()
     return {"message": "Holiday deleted"}
 

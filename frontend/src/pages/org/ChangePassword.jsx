@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const OrgChangePassword = () => {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { login, logout } = useAuth();
   const [formData, setFormData] = useState({
     old_password: '',
     new_password: '',
@@ -60,11 +60,15 @@ const OrgChangePassword = () => {
     setLoading(true);
 
     try {
-      await orgApi.changePassword({
+      const res = await orgApi.changePassword({
         old_password: formData.old_password,
         new_password: formData.new_password,
       });
-      
+      // Changing the password signs out every session on the account, this
+      // tab's refresh token included. Keep the fresh pair the server returned,
+      // or this tab would be signed out when its access token next expires.
+      if (res?.access_token) login(res.access_token, { refreshToken: res.refresh_token });
+
       setSuccess('Password changed successfully!');
       
       // Clear form

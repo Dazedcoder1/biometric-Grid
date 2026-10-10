@@ -48,6 +48,18 @@ const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  // A temporary password from an administrator. Nothing else until they pick
+  // their own — the server refuses every other request anyway, so letting them
+  // reach a dashboard would only show a screen full of errors.
+  // The reverse — sending someone WITHOUT the flag away from that screen — is
+  // deliberately absent. A tab signed in before the reset holds a token with
+  // no flag, the server refuses its requests, and api.js sends it here; a
+  // redirect back out would bounce between the two forever.
+  const onChangeScreen = location.pathname === '/change-password';
+  if (user.mustChangePassword && !onChangeScreen) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to={homePathForUser(user)} replace />;
   }
@@ -58,24 +70,28 @@ const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
 
   const superAdmin = isSuperAdmin(user);
 
-  // No vault for the platform operator. Every vault query is scoped to the
-  // caller's own organisation, and a Super Admin has none, so the screens
-  // showed empty lists and would have failed on the first save. And the vault
-  // holds people's credentials inside one organisation — not something the
-  // platform operator should be browsing. The sidebar hides the links; this
-  // covers a typed or bookmarked URL.
-  if (superAdmin && location.pathname.startsWith('/vault')) {
-    return <Navigate to={PLATFORM_HOME} replace />;
+  // The Super Admin's vault screens are People (everyone's vaults), the
+  // Dependency Map and the Audit Log. What they do NOT have is a vault of
+  // their own — a vault belongs to an organisation and they have none — so
+  // the personal vault page and single-credential pages send them to People.
+  const superAdminVaultPages = ['/vault/people', '/vault/dependencies', '/vault/audit'];
+  if (superAdmin && location.pathname.startsWith('/vault')
+      && !superAdminVaultPages.includes(location.pathname)) {
+    return <Navigate to={getActingTenantId() ? '/vault/people' : PLATFORM_HOME} replace />;
   }
 
   // A Super Admin has no organisation of their own, and every screen under
-  // /super is tenant-scoped. Without a chosen organisation each of those pages
-  // renders, fires its requests and shows an error — so send them to the
-  // chooser first rather than letting them watch a dashboard fail.
+  // /super — plus People and the Dependency Map — is scoped to one. Without a
+  // chosen organisation each of those pages renders, fires its requests and
+  // shows an error — so send them to the chooser first rather than letting
+  // them watch a page fail. The Audit Log is the exception: with no
+  // organisation chosen it shows all of them.
   const needsOrganisation = (
     superAdmin
     && !getActingTenantId()
-    && location.pathname.startsWith('/super')
+    && (location.pathname.startsWith('/super')
+      || location.pathname === '/vault/people'
+      || location.pathname === '/vault/dependencies')
   );
   if (needsOrganisation) {
     return <Navigate to="/choose-organisation" replace state={{ from: location.pathname }} />;

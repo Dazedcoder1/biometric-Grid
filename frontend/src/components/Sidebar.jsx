@@ -51,22 +51,31 @@ const Sidebar = ({ role, label, iconColor }) => {
   const superAdmin = isSuperAdmin(user);
 
   const getNavItems = () => {
-    // The platform operator. Their own screens come first; the organisation's
-    // screens appear only once one is chosen, since every one of them is
-    // scoped to it and would otherwise just bounce to the chooser.
+    // The platform operator: full control. Their own screens come first; the
+    // organisation's screens appear once one is chosen, since each is scoped
+    // to it and would otherwise just bounce to the chooser.
     //
-    // Two things a Tenant Admin has that a Super Admin does not:
-    //  * the vault — personal credentials inside one organisation, scoped to
-    //    the caller's own tenant, which a Super Admin does not have;
-    //  * Change API Key — rotation lives on the Organisations screen, which
-    //    issues the key, shows it once and audits it. One place, not two.
+    // The vault section is People (everyone's vaults — reveal, change, reset
+    // sign-in passwords), the Dependency Map and the Audit Log. Not a personal
+    // vault: a vault belongs to an organisation and a Super Admin has none.
+    // Change API Key is absent too — rotation lives on Organisations, which
+    // issues the key, shows it once and audits it. One place, not two.
     if (role === 'superadmin' && superAdmin) {
       const items = [
         { section: 'Platform' },
         { icon: <LayoutGrid size={18} />, label: 'Organisations', path: PLATFORM_HOME },
+        // Works with or without an organisation chosen: without one it shows
+        // every organisation's activity.
+        { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
       ];
       if (actingTenantName) {
-        items.push({ section: 'Organisation' }, ...TENANT_ITEMS);
+        items.push(
+          { section: 'Organisation' },
+          ...TENANT_ITEMS,
+          { section: 'Credential Vault' },
+          { icon: <Users size={18} />, label: 'People', path: '/vault/people' },
+          { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
+        );
       } else {
         items.push({ icon: <Building2 size={18} />, label: 'Choose organisation', path: '/choose-organisation' });
       }
@@ -96,6 +105,8 @@ const Sidebar = ({ role, label, iconColor }) => {
           // API-key caller cannot satisfy. Migration a6b7c8d9e0f1.
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
+          // Everyone in the organisation, one vault at a time.
+          { icon: <Users size={18} />, label: 'People', path: '/vault/people' },
           { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
           { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
         ];
@@ -114,6 +125,8 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <Lock size={18} />, label: 'Change Password', path: '/org/change-password' },
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
+          // The employees in their own department.
+          { icon: <Users size={18} />, label: 'People', path: '/vault/people' },
           { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
           { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
         ];

@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import text
@@ -41,7 +42,7 @@ async def devices_status(tenant: Tenant = Depends(verify_tenant_api_key), db: As
     return result.mappings().first()
 
 @router.post('/devices', status_code=201)
-async def create_device(data: DeviceIn, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def create_device(data: DeviceIn, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     """Register a reader. The Devices page has always offered this; the route
     did not exist, so Add Device returned 404."""
     existing = (await db.execute(select(Device).where(
@@ -55,6 +56,10 @@ async def create_device(data: DeviceIn, tenant: Tenant = Depends(verify_tenant_a
     device = Device(tenant_id=tenant.id, device_id=data.device_id,
                     secret_key=data.secret_key, status="offline")
     db.add(device)
+    await activity.log(
+        db, request, action="device.created", tenant_id=tenant.id,
+        target_type="device", target_id=data.device_id,
+    )
     await db.commit()
     await db.refresh(device)
     return {"device_id": device.device_id, "status": device.status, "last_seen": device.last_seen}
@@ -83,7 +88,7 @@ async def get_device(device_id: str, tenant: Tenant = Depends(verify_tenant_api_
 
 
 @router.put('/devices/{device_id}')
-async def update_device(device_id: str, data: DeviceUpdate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def update_device(device_id: str, data: DeviceUpdate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     device = (await db.execute(select(Device).where(
         Device.device_id == device_id, Device.tenant_id == tenant.id
     ))).scalars().first()
@@ -107,29 +112,44 @@ async def update_device(device_id: str, data: DeviceUpdate, tenant: Tenant = Dep
             )
         device.status = "offline"
 
+    changes = [label for label, given in (("new device key", data.secret_key), ("marked offline", data.status)) if given is not None]
+    if changes:
+        await activity.log(
+            db, request, action="device.updated", tenant_id=tenant.id,
+            target_type="device", target_id=device.device_id, details={"changes": changes},
+        )
     await db.commit()
     return {"message": "Device updated", "device_id": device.device_id}
 
 
 @router.delete('/devices/{device_id}', status_code=204)
-async def delete_device(device_id: str, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def delete_device(device_id: str, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     device = (await db.execute(select(Device).where(
         Device.device_id == device_id, Device.tenant_id == tenant.id
     ))).scalars().first()
     if not device:
         raise HTTPException(404, "Device not found")
+    await activity.log(
+        db, request, action="device.deleted", tenant_id=tenant.id,
+        target_type="device", target_id=device.device_id,
+    )
     await db.delete(device)
     await db.commit()
 
 
 @router.post('/devices/fire-command')
-async def fire_device_command(data: FireCommandRequest, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def fire_device_command(data: FireCommandRequest, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Device).where(Device.device_id == data.device_id, Device.tenant_id == tenant.id))
     device = result.scalars().first()
     if not device:
         raise HTTPException(404, "Device not found")
     cmd = Command(tenant_id=tenant.id, device_id=data.device_id, command=data.command, target_id=data.target_id)
     db.add(cmd)
+    await activity.log(
+        db, request, action="device.command_sent", tenant_id=tenant.id,
+        target_type="device", target_id=data.device_id,
+        details={"command": data.command, "target_id": data.target_id},
+    )
     await db.commit()
     await db.refresh(cmd)
     mqtt_manager.publish_command(tenant.id, data.device_id, cmd.id, data.command, data.target_id)

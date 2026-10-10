@@ -7,7 +7,7 @@ the admin's own tenant; they can assign to anyone in it.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from app.models.domain import GitHubRepo, Task, TaskComment, TaskSource, User
 from app.schemas.task_schemas import (
     CommentCreate, TaskCreate, TaskPushRequest, TaskUpdate,
 )
+from app.core import activity
 from app.services import task_service as svc
 
 router = APIRouter()
@@ -136,6 +137,7 @@ async def sync_from_github(
 @router.post("/tasks", status_code=201)
 async def create_task(
     data: TaskCreate,
+    request: Request,
     current_user: User = Depends(_org_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -157,6 +159,12 @@ async def create_task(
         due_date=data.due_date,
     )
     db.add(task)
+    await db.flush()
+    await activity.log(
+        db, request, action="task.created", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="task", target_id=task.id,
+        details={"title": task.title, "assigned_to": task.assigned_to, "priority": task.priority},
+    )
     await db.commit()
     await db.refresh(task)
 
@@ -182,6 +190,7 @@ async def create_task(
 async def update_task(
     task_id: int,
     data: TaskUpdate,
+    request: Request,
     current_user: User = Depends(_org_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -202,6 +211,12 @@ async def update_task(
     for field, value in payload.items():
         setattr(task, field, value)
 
+    if changed:
+        await activity.log(
+            db, request, action="task.updated", tenant_id=current_user.tenant_id, actor=current_user,
+            target_type="task", target_id=task.id,
+            details={"title": task.title, "fields": sorted(changed)},
+        )
     await db.commit()
     await db.refresh(task)
 
@@ -251,6 +266,7 @@ async def push_task_to_github(
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: int,
+    request: Request,
     current_user: User = Depends(_org_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -260,6 +276,10 @@ async def delete_task(
             400,
             "This task mirrors a GitHub issue and would reappear on the next sync.",
         )
+    await activity.log(
+        db, request, action="task.deleted", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="task", target_id=task.id, details={"title": task.title},
+    )
     await db.delete(task)
     await db.commit()
     return {"message": "Task deleted"}
@@ -288,6 +308,7 @@ async def list_comments(
 async def add_comment(
     task_id: int,
     data: CommentCreate,
+    request: Request,
     current_user: User = Depends(_org_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -297,6 +318,10 @@ async def add_comment(
         author_name=current_user.name, body=data.body,
     )
     db.add(comment)
+    await activity.log(
+        db, request, action="task.commented", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="task", target_id=task.id, details={"title": task.title},
+    )
     await db.commit()
     await db.refresh(comment)
 

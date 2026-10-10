@@ -112,8 +112,12 @@ def test_only_secret_exposing_permissions_require_step_up():
 
     Over-applying it trains users to approve prompts reflexively, which is how
     MFA fatigue attacks succeed.
+
+    Two codes expose secrets: revealing your own or shared credentials, and an
+    administrator revealing one from the vault of someone they administer.
+    Listing people, resetting passwords and everything else stays without it.
     """
-    assert STEP_UP_REQUIRED == {"credential.reveal"}
+    assert STEP_UP_REQUIRED == {"credential.reveal", "credential.oversee"}
 
 
 def test_system_roles_reference_real_permissions():

@@ -116,5 +116,9 @@ export function userFromToken(token) {
     dept_id: payload.dept_id ?? null,
     name: payload.name || null,
     email: payload.email || null,
+    // An admin issued a temporary password. ProtectedRoute sends them to
+    // /change-password until they pick their own. The server enforces the
+    // same thing from the database, so this only decides what to draw.
+    mustChangePassword: payload.must_change_password === true,
   };
 }

@@ -434,10 +434,31 @@ class System(Base):
     environment = Column(String(32), nullable=True)  # production | staging | dev
     description = Column(Text, nullable=True)
 
+    # Which department this system belongs to. NULL means shared — the
+    # company VPN, email — and everyone in the organisation sees it. A Tenant
+    # Admin sees every department; everyone else sees their own plus shared.
+    # See dependency_service.Scope. Migration d9e0f1a2b3c4.
+    department_id = Column(
+        Integer,
+        ForeignKey("departments.department_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", "environment", name="uq_system_tenant_name_env"),
+        # One name per environment per department, so Production and Testing
+        # can each have their own "api" without colliding. COALESCE because a
+        # NULL department (shared) would otherwise never conflict with itself.
+        Index(
+            "uq_system_tenant_dept_name_env",
+            "tenant_id",
+            func.coalesce(department_id, 0),
+            "name",
+            "environment",
+            unique=True,
+        ),
     )
 
 

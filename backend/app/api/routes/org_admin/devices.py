@@ -15,7 +15,9 @@ scoped is the *target* of a command — see fire_command below.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from app.core import activity
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +85,7 @@ async def devices_status(
 @router.post("/devices", status_code=201)
 async def create_device(
     data: DeviceIn,
+    request: Request,
     current_user: User = Depends(require_role("org_admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -107,6 +110,10 @@ async def create_device(
         status="offline",
     )
     db.add(device)
+    await activity.log(
+        db, request, action="device.created", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="device", target_id=data.device_id,
+    )
     await db.commit()
     await db.refresh(device)
     return {"device_id": device.device_id, "status": device.status}
@@ -115,6 +122,7 @@ async def create_device(
 @router.post("/devices/fire-command")
 async def fire_command(
     data: FireCommandRequest,
+    request: Request,
     current_user: User = Depends(require_role("org_admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -159,6 +167,11 @@ async def fire_command(
         target_id=data.target_id,
     )
     db.add(cmd)
+    await activity.log(
+        db, request, action="device.command_sent", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="device", target_id=data.device_id,
+        details={"command": data.command, "target_id": data.target_id},
+    )
     await db.commit()
     await db.refresh(cmd)
 

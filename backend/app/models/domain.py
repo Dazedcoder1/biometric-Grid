@@ -94,6 +94,10 @@ class User(Base):
     # way to resolve our users, so this mapping has to be entered by hand.
     github_username = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    # Set when an administrator issues a temporary password. Until the person
+    # chooses their own, every authenticated route except changing it refuses
+    # them — see dependencies.get_current_user. Migration c8d9e0f1a2b3.
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

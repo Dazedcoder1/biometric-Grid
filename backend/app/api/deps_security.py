@@ -32,7 +32,7 @@ from app.core import audit, mfa
 from app.core.security import decode_token
 from app.core.permissions import DENY_ALL, STEP_UP_REQUIRED, PermissionSet
 from app.db.session import get_db
-from app.models.domain import User
+from app.models.domain import Tenant, User
 from app.models.security import Permission, Role, RolePermission, UserRole
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 class SecurityContext:
     """Everything a guarded route needs to authorise and audit one request."""
 
-    __slots__ = ("user", "permissions", "session_jti", "source_ip", "user_agent")
+    __slots__ = ("user", "permissions", "session_jti", "source_ip", "user_agent",
+                 "acting_tenant_id")
 
     def __init__(
         self,
@@ -51,21 +52,32 @@ class SecurityContext:
         session_jti: str | None = None,
         source_ip: str | None = None,
         user_agent: str | None = None,
+        acting_tenant_id: int | None = None,
     ) -> None:
         self.user = user
         self.permissions = permissions
         self.session_jti = session_jti
         self.source_ip = source_ip
         self.user_agent = user_agent
+        # The organisation this request acts within. Everyone's own, except
+        # a Super Admin's: they belong to no organisation, and name the one
+        # they are working in with X-Acting-Tenant-Id — the same header the
+        # Tenant Admin screens already use for them.
+        self.acting_tenant_id = (
+            acting_tenant_id if acting_tenant_id is not None else user.tenant_id
+        )
 
     @property
     def tenant_id(self) -> int | None:
-        return self.user.tenant_id
+        return self.acting_tenant_id
 
     def audit_kwargs(self) -> dict:
         """Actor fields for audit.record(), so every call site is consistent."""
+        # Filed under the organisation acted in. For a Super Admin working
+        # inside one, that puts their actions in that organisation's own audit
+        # log, where its Tenant Admin can see them.
         return {
-            "tenant_id": self.user.tenant_id,
+            "tenant_id": self.acting_tenant_id,
             "actor_id": self.user.id,
             "actor_role": self.user.role,
             "source_ip": self.source_ip,
@@ -173,7 +185,31 @@ async def get_security_context(
         session_jti=_session_jti(request),
         source_ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        acting_tenant_id=await _acting_tenant(db, request, user),
     )
+
+
+async def _acting_tenant(db: AsyncSession, request: Request, user: User) -> int | None:
+    """
+    The organisation a Super Admin is working in, from X-Acting-Tenant-Id.
+
+    Honoured for super_admin only. Anyone else's organisation is fixed by
+    their account; a stale header left in a browser is ignored rather than
+    obeyed. An unknown organisation is a 404, never a silent fallback.
+    """
+    if user.role != "super_admin":
+        return None
+    raw = request.headers.get("x-acting-tenant-id")
+    if not raw:
+        return None
+    try:
+        tid = int(raw)
+    except ValueError:
+        raise HTTPException(400, "X-Acting-Tenant-Id must be a number.") from None
+    exists = (await db.execute(select(Tenant.id).where(Tenant.id == tid))).first()
+    if not exists:
+        raise HTTPException(404, "That organisation does not exist.")
+    return tid
 
 
 def require_permission(code: str):
@@ -312,3 +348,21 @@ def require_any_permission(*codes: str):
         raise HTTPException(403, f"This action requires one of: {', '.join(codes)}.")
 
     return guard
+
+
+def require_organisation(ctx: SecurityContext) -> int:
+    """
+    The organisation this request acts within, or 409 if there is none.
+
+    409 rather than 403, matching the Tenant Admin routes: nothing is
+    forbidden, the request is just missing which organisation to act on — a
+    Super Admin who has not chosen one yet. The client turns it into the
+    organisation chooser.
+    """
+    if ctx.acting_tenant_id is None:
+        raise HTTPException(
+            409,
+            "Choose an organisation first. A Super Admin works inside one "
+            "organisation at a time — pick it from Organisations or the sidebar.",
+        )
+    return ctx.acting_tenant_id

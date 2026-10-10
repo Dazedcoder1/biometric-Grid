@@ -2,34 +2,53 @@
 //
 // The audit log viewer, with filters, CSV export and chain verification.
 //
+// It records the whole app now, not just the vault — sign-ins, people,
+// leave, devices, settings, tasks — and keeps itself current: the first
+// page refreshes every 30 seconds while the tab is visible. Later pages do
+// not, because new entries arriving would shift what is on them.
+//
+// What you see is scoped on the server: a Tenant Admin sees the whole
+// organisation, an Org Admin their own department.
+//
 // Denials are styled to stand out. A spike in them is what probing looks like,
 // and surfacing that is most of the reason denied attempts are recorded at all.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Download, FileSearch, RefreshCw, ShieldAlert, ShieldCheck, X,
+  AlertCircle, Building2, Download, FileSearch, RefreshCw, ShieldAlert, ShieldCheck, X,
 } from 'lucide-react';
 
 import {
-  activeFilterChips, categoryMeta, groupByDay, shortAgo, timeOfDay,
+  CATEGORY_META, activeFilterChips, actorText, categoryMeta, groupByDay, shortAgo,
+  targetText, timeOfDay,
 } from '../../utils/auditMeta';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
 import usePermissions from '../../hooks/usePermissions';
 import { useAuth } from '../../context/AuthContext';
-import { vaultApi } from '../../services/api';
+import { getActingTenantId, getActingTenantName, vaultApi } from '../../services/api';
+import { isSuperAdmin } from '../../utils/roles';
 import { sidebarPropsFor } from '../../utils/sidebarRole';
 import './vault.css';
 
 const PAGE = 100;
+const REFRESH_MS = 30_000;
 
-const NO_FILTERS = { action: '', result: '', actor_id: '', since: '', until: '' };
+const NO_FILTERS = {
+  action: '', category: '', result: '', actor_id: '', since: '', until: '',
+};
 
 const RESULT_TONE = { denied: 'var(--bad)', error: 'var(--warn)', success: 'var(--ok)' };
 
 export default function AuditLog() {
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { can, grantsAll } = usePermissions();
+  // A Super Admin reads one organisation — the one they are working in — or
+  // all of them at once. With none chosen, it is all of them.
+  const superAdmin = isSuperAdmin(user);
+  const actingName = getActingTenantName();
+  const hasOrg = !!getActingTenantId();
+  const [allOrgs, setAllOrgs] = useState(() => superAdmin && !hasOrg);
   const canVerify = can('audit.verify');
   const canExport = can('audit.view');
   const [entries, setEntries] = useState([]);
@@ -40,38 +59,86 @@ export default function AuditLog() {
   const [integrity, setIntegrity] = useState(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [filters, setFilters] = useState(NO_FILTERS);
 
   const load = useCallback(async (nextOffset = 0) => {
     try {
       const data = await vaultApi.auditLog({
-        ...filters, limit: PAGE, offset: nextOffset,
+        ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}), limit: PAGE, offset: nextOffset,
       });
       setEntries(data.entries);
       setTotal(data.total);
       setOffset(nextOffset);
+      setUpdatedAt(Date.now());
+      setError('');
     } catch (err) {
       setError(err.message);
     }
-  }, [filters]);
+  }, [filters, allOrgs]);
+
+  // The headline numbers and the action list move as new entries arrive —
+  // a new kind of action should appear in the filter without a reload.
+  const loadSideData = useCallback(async () => {
+    try {
+      const [a, s] = await Promise.all([vaultApi.auditActions(allOrgs), vaultApi.auditSummary(7, allOrgs)]);
+      setActions(a);
+      setSummary(s);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [allOrgs]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([load(offset), loadSideData()]);
+    setRefreshing(false);
+  }, [load, loadSideData, offset]);
+
+  // First load, and again whenever the filters change. Written out with a
+  // cancellation flag: changing a filter mid-request must not let the older,
+  // slower response land on top of the newer one.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([vaultApi.auditActions(allOrgs), vaultApi.auditSummary(7, allOrgs)]).then(
+      ([a, s]) => { if (!cancelled) { setActions(a); setSummary(s); } },
+      (err) => { if (!cancelled) setError(err.message); },
+    );
+    return () => { cancelled = true; };
+  }, [allOrgs]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [a, s] = await Promise.all([
-          vaultApi.auditActions(),
-          vaultApi.auditSummary(7),
-        ]);
-        setActions(a);
-        setSummary(s);
-      } catch (err) {
-        setError(err.message);
-      }
-    })();
-  }, []);
+    let cancelled = false;
+    vaultApi.auditLog({ ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}), limit: PAGE, offset: 0 }).then(
+      (data) => {
+        if (cancelled) return;
+        setEntries(data.entries);
+        setTotal(data.total);
+        setOffset(0);
+        setUpdatedAt(Date.now());
+        setError('');
+      },
+      (err) => { if (!cancelled) setError(err.message); },
+    );
+    return () => { cancelled = true; };
+  }, [filters, allOrgs]);
 
-  useEffect(() => { load(0); }, [load]);
+  // Live: first page only, tab visible only. A hidden tab polling every 30
+  // seconds all day is load nobody is looking at.
+  useEffect(() => {
+    if (offset !== 0) return undefined;
+    const tick = () => {
+      if (document.visibilityState === 'visible') { load(0); loadSideData(); }
+    };
+    const timer = setInterval(tick, REFRESH_MS);
+    // Coming back to the tab: catch up straight away rather than on the
+    // next tick.
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [offset, load, loadSideData]);
 
   const verify = async () => {
     setChecking(true);
@@ -86,7 +153,7 @@ export default function AuditLog() {
   };
 
   const exportCsv = async () => {
-    try { await vaultApi.downloadAudit(filters); }
+    try { await vaultApi.downloadAudit({ ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}) }); }
     catch (err) { setError(err.message); }
   };
 
@@ -104,6 +171,40 @@ export default function AuditLog() {
           <span>{error}</span>
         </div>
       )}
+
+      {!grantsAll && user?.role && user.role !== 'tenant_admin' && (
+        <div className="v-banner" style={{ background: 'rgba(14,165,233,.1)', color: 'var(--info)' }}>
+          <Building2 size={14} />
+          <span>
+            Showing activity in your department: things done by its people, and
+            things done to them, their credentials, leave, tasks and systems.
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+        gap: '.6rem', marginBottom: '.6rem', fontSize: '.75rem', color: 'var(--text3)' }}>
+        {superAdmin && hasOrg && (
+          <select
+            className="form-input form-select"
+            aria-label="Which organisations"
+            value={allOrgs ? 'all' : 'org'}
+            onChange={(e) => setAllOrgs(e.target.value === 'all')}
+            style={{ minWidth: 200, marginRight: 'auto' }}
+          >
+            <option value="org">{actingName || 'This organisation'}</option>
+            <option value="all">All organisations</option>
+          </select>
+        )}
+        {superAdmin && !hasOrg && (
+          <span style={{ marginRight: 'auto', color: 'var(--text2)' }}>All organisations</span>
+        )}
+        {offset === 0 && <span title="New entries appear every 30 seconds">● Live</span>}
+        {updatedAt && <span>Updated {shortAgo(new Date(updatedAt).toISOString())}</span>}
+        <button type="button" className="v-btn" onClick={refresh} disabled={refreshing}>
+          <RefreshCw size={13} /> {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       {/* ─── headline numbers ──────────────────────────────────────── */}
       {summary && (
@@ -203,6 +304,15 @@ export default function AuditLog() {
           ))}
         </select>
 
+        <select className="form-input form-select" value={filters.category}
+          aria-label="Filter by category"
+          onChange={(e) => set('category', e.target.value)}>
+          <option value="">All categories</option>
+          {Object.entries(CATEGORY_META).filter(([k]) => k !== 'other').map(([k, m]) => (
+            <option key={k} value={k}>{m.label}</option>
+          ))}
+        </select>
+
         <select className="form-input form-select" value={filters.result}
           aria-label="Filter by result"
           onChange={(e) => set('result', e.target.value)}>
@@ -264,8 +374,8 @@ export default function AuditLog() {
             <p className="v-empty-body">
               {hasFilters
                 ? 'Try widening the date range, or clear the filters to see everything.'
-                : 'Entries appear here as soon as anyone reveals, shares or '
-                  + 'rotates a credential.'}
+                : 'Entries appear here as people sign in, change records, handle '
+                  + 'leave and devices, or use the vault.'}
             </p>
           </div>
         </div>
@@ -280,7 +390,7 @@ export default function AuditLog() {
             </h4>
 
             <div className="card-box" style={{ padding: 0, overflow: 'hidden' }}>
-              {group.entries.map((e) => <LogRow key={e.seq} entry={e} today={group.heading === 'Today'} />)}
+              {group.entries.map((e) => <LogRow key={e.seq} entry={e} today={group.heading === 'Today'} showOrg={allOrgs} />)}
             </div>
           </section>
         ))
@@ -308,7 +418,7 @@ export default function AuditLog() {
 
 // ─── one entry ───────────────────────────────────────────────────────────────
 
-function LogRow({ entry, today }) {
+function LogRow({ entry, today, showOrg }) {
   const { icon: CategoryIcon, label: categoryLabel, tint } = categoryMeta(entry.category);
   const denied = entry.result === 'denied';
   const tampered = entry.action === 'credential.tamper_detected';
@@ -323,14 +433,17 @@ function LogRow({ entry, today }) {
         <div className="v-log-line">
           {/* Who first, then what. The previous order led with the sequence
               number, which is the one column nobody scans for. */}
-          <strong>{entry.actor_name || (entry.actor_id ? `User #${entry.actor_id}` : 'System')}</strong>
+          {showOrg && entry.organisation && (
+            <span className="v-chip" style={{ marginRight: 6 }} title="Organisation">{entry.organisation}</span>
+          )}
+          <strong>{actorText(entry)}</strong>
           {' '}
           <span style={{ color: denied || tampered ? 'var(--bad)' : 'inherit' }}>
             {entry.label}
           </span>
-          {entry.target_type && (
-            <span className="v-log-target">
-              {' '}{entry.target_type} {entry.target_id}
+          {targetText(entry) && (
+            <span className="v-log-target" title={entry.target_type ? `${entry.target_type} ${entry.target_id ?? ''}` : undefined}>
+              {' · '}{targetText(entry)}
             </span>
           )}
         </div>

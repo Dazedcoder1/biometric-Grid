@@ -92,6 +92,14 @@ async def my_vaults(
     db: AsyncSession = Depends(get_db),
 ):
     """Personal and shared vaults, created on first call."""
+    if ctx.user.tenant_id is None:
+        # A vault belongs to an organisation and a Super Admin has none —
+        # creating one used to fail on the database constraint with a 500.
+        # Their way into everyone's vaults is People.
+        raise HTTPException(
+            409, "A Super Admin has no personal vault. Use People to work with "
+                 "the vaults of an organisation's members.",
+        )
     vaults = await svc.ensure_vaults(db, ctx.user)
     await db.commit()
 

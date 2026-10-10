@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, text
@@ -14,6 +15,7 @@ router = APIRouter()
 @router.post("", response_model=LeaveResponse)
 async def apply_leave(
     data: LeaveCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -28,6 +30,12 @@ async def apply_leave(
         status="pending"
     )
     db.add(new_leave)
+    await db.flush()
+    await activity.log(
+        db, request, action="leave.requested", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="leave", target_id=new_leave.leave_id,
+        details={"type": data.leave_type, "from": str(data.start_date), "to": str(data.end_date)},
+    )
     await db.commit()
     await db.refresh(new_leave)
     return new_leave
@@ -98,6 +106,7 @@ async def get_leave_stats(
 @router.patch("/{leave_id}/cancel", response_model=MessageResponse)
 async def cancel_leave(
     leave_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -111,5 +120,10 @@ async def cancel_leave(
         raise HTTPException(400, "Can only cancel pending leaves")
         
     leave.status = "cancelled"
+    await activity.log(
+        db, request, action="leave.cancelled", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="leave", target_id=leave.leave_id,
+        details={"type": leave.leave_type},
+    )
     await db.commit()
     return {"message": "Leave cancelled successfully"}

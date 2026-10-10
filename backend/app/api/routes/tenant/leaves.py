@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import Optional
@@ -23,22 +24,34 @@ async def list_leave_requests(status: Optional[str] = None, dept_id: Optional[in
     return result.mappings().all()
 
 @router.patch('/leaves/{leave_id}/approve')
-async def approve_leave(leave_id: int, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def approve_leave(leave_id: int, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     leave_info = await db.execute(text("SELECT employee_id, leave_type, start_date, end_date FROM leaves WHERE leave_id=:leave_id AND tenant_id=:tenant_id"), {"leave_id": leave_id, "tenant_id": tenant.id})
     info = leave_info.mappings().first()
     if not info: raise HTTPException(404, "Leave not found")
     result = await db.execute(text("UPDATE leaves SET status='approved', approved_at=NOW(), approved_by=:tenant_id WHERE leave_id=:leave_id AND tenant_id=:tenant_id AND status IN ('pending','approved_by_dept')"), {"leave_id": leave_id, "tenant_id": tenant.id})
     if result.rowcount == 0: raise HTTPException(404, "Cannot approve")
-    await db.commit()
+    await activity.log(
+        db, request, action="leave.approved", tenant_id=tenant.id,
+        target_type="leave", target_id=leave_id,
+        details={"employee_id": info["employee_id"], "type": info["leave_type"], "stage": "final"},
+    )
+    # Notified in the same transaction. It used to be added after the
+    # commit and never committed, so the employee was never told.
     await notify_single_user(db, tenant.id, None, info["employee_id"], "leave_approved", "Leave Fully Approved", f"Your {info['leave_type']} leave from {info['start_date']} to {info['end_date']} has been fully approved")
+    await db.commit()
     return {"message": "Leave approved"}
 
 @router.patch('/leaves/{leave_id}/reject')
-async def reject_leave(leave_id: int, reason: str = None, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def reject_leave(leave_id: int, request: Request, reason: str = None, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     leave_info = await db.execute(text("SELECT employee_id, leave_type, start_date, end_date FROM leaves WHERE leave_id=:leave_id AND tenant_id=:tenant_id"), {"leave_id": leave_id, "tenant_id": tenant.id})
     info = leave_info.mappings().first()
     result = await db.execute(text("UPDATE leaves SET status='rejected', rejection_reason=:reason, rejected_at=NOW() WHERE leave_id=:leave_id AND tenant_id=:tenant_id"), {"leave_id": leave_id, "tenant_id": tenant.id, "reason": reason})
     if result.rowcount == 0: raise HTTPException(404, "Leave not found")
+    await activity.log(
+        db, request, action="leave.rejected", tenant_id=tenant.id,
+        target_type="leave", target_id=leave_id, reason=reason,
+        details={"employee_id": info["employee_id"] if info else None, "stage": "final"},
+    )
     await db.commit()
     return {"message": "Leave rejected"}
 

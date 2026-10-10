@@ -1,4 +1,4 @@
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,7 +14,16 @@ logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
+#: The only routes open to someone holding a temporary password from an admin:
+#: the two ways of choosing a new one.
+PASSWORD_CHANGE_PATHS = frozenset({
+    "/api/auth/change-password",
+    "/api/employee/profile/change-password",
+})
+
+
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> User:
@@ -28,6 +37,17 @@ async def get_current_user(
 
     if not user or not user.is_active:
         raise HTTPException(401, "User not found or inactive")
+
+    # An administrator reset this password. Until the person picks their own,
+    # nothing else is open to them. Read from the row, not the token claim: a
+    # token issued before the reset would otherwise slip through, and the
+    # claim is client-visible anyway.
+    if getattr(user, "must_change_password", False) and request.url.path not in PASSWORD_CHANGE_PATHS:
+        raise HTTPException(
+            403,
+            "Choose a new password before continuing — this one was set by an administrator.",
+            headers={"X-Password-Change-Required": "true"},
+        )
 
     return user
 

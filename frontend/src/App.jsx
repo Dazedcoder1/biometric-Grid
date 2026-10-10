@@ -53,6 +53,8 @@ import VaultCredentials from './pages/vault/Credentials';
 import VaultCredentialDetail from './pages/vault/CredentialDetail';
 import VaultAuditLog from './pages/vault/AuditLog';
 import VaultDependencyMap from './pages/vault/DependencyMap';
+import VaultPeople from './pages/vault/People';
+import ChangePasswordRequired from './pages/ChangePasswordRequired';
 
 function App() {
   return (
@@ -388,6 +390,29 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['tenant_admin', 'org_admin']}>
                   <VaultAuditLog />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Everyone's vault, for the people who administer them: a Tenant
+                Admin sees their organisation, an Org Admin their department.
+                The server decides who is listed; this only gates the screen. */}
+            <Route
+              path="/vault/people"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'org_admin']}>
+                  <VaultPeople />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* After an admin issues a temporary password. Any signed-in role;
+                ProtectedRoute sends people here until they choose their own. */}
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePasswordRequired />
                 </ProtectedRoute>
               }
             />

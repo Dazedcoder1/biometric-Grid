@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import text
@@ -71,7 +72,7 @@ async def list_org_admins(tenant: Tenant = Depends(verify_tenant_api_key), db: A
     return result.mappings().all()
 
 @router.post('/org-admins')
-async def create_org_admin(data: OrgAdminCreate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def create_org_admin(data: OrgAdminCreate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     dept_result = await db.execute(select(Department).where(Department.department_id == data.dept_id, Department.tenant_id == tenant.id, Department.is_active == True))
     department = dept_result.scalars().first()
     if not department:
@@ -86,6 +87,13 @@ async def create_org_admin(data: OrgAdminCreate, tenant: Tenant = Depends(verify
 
     org_admin = User(tenant_id=tenant.id, name=data.name, email=data.email, password_hash=hash_password(password), dept_id=data.dept_id, role="org_admin", employee_code=None)
     db.add(org_admin)
+    await db.flush()
+    await activity.log(
+        db, request, action="org_admin.created", tenant_id=tenant.id,
+        target_type="user", target_id=org_admin.id,
+        details={"name": org_admin.name, "email": org_admin.email,
+                 "department": department.department_name},
+    )
     await db.commit()
     await db.refresh(org_admin)
     return {
@@ -105,11 +113,12 @@ async def create_org_admin(data: OrgAdminCreate, tenant: Tenant = Depends(verify
     }
 
 @router.put('/org-admins/{admin_id}')
-async def update_org_admin(admin_id: int, data: OrgAdminUpdate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def update_org_admin(admin_id: int, data: OrgAdminUpdate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == admin_id, User.tenant_id == tenant.id, User.role == "org_admin"))
     org_admin = result.scalars().first()
     if not org_admin:
         raise HTTPException(404, "Org admin not found")
+    changed = [f for f in ("name", "dept_id", "is_active") if getattr(data, f) is not None]
     if data.name is not None: org_admin.name = data.name
     if data.dept_id is not None:
         dept_result = await db.execute(select(Department).where(Department.department_id == data.dept_id, Department.tenant_id == tenant.id))
@@ -117,15 +126,25 @@ async def update_org_admin(admin_id: int, data: OrgAdminUpdate, tenant: Tenant =
             raise HTTPException(400, "Invalid department")
         org_admin.dept_id = data.dept_id
     if data.is_active is not None: org_admin.is_active = data.is_active
+    if changed:
+        await activity.log(
+            db, request, action="org_admin.updated", tenant_id=tenant.id,
+            target_type="user", target_id=org_admin.id,
+            details={"name": org_admin.name, "fields": changed},
+        )
     await db.commit()
     return {"message": "Org admin updated"}
 
 @router.delete('/org-admins/{admin_id}')
-async def delete_org_admin(admin_id: int, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def delete_org_admin(admin_id: int, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == admin_id, User.tenant_id == tenant.id, User.role == "org_admin"))
     org_admin = result.scalars().first()
     if not org_admin:
         raise HTTPException(404, "Org admin not found")
     org_admin.is_active = False
+    await activity.log(
+        db, request, action="org_admin.deactivated", tenant_id=tenant.id,
+        target_type="user", target_id=org_admin.id, details={"name": org_admin.name},
+    )
     await db.commit()
     return {"message": "Org admin deactivated"}

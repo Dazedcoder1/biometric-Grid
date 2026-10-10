@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -28,7 +29,7 @@ async def list_department_leaves(current_user: User = Depends(require_role('org_
     return result.mappings().all()
 
 @router.patch('/leaves/{leave_id}/approve')
-async def approve_leave(leave_id: int, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
+async def approve_leave(leave_id: int, request: Request, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
     leave_info = await db.execute(text("""
         SELECT l.employee_id, l.leave_type, l.start_date, l.end_date, u.name as employee_name
         FROM leaves l JOIN users u ON l.employee_id=u.id WHERE l.leave_id=:leave_id
@@ -41,14 +42,23 @@ async def approve_leave(leave_id: int, current_user: User = Depends(require_role
         RETURNING l.leave_id
     """), {"leave_id": leave_id, "dept_id": current_user.dept_id, "tenant_id": current_user.tenant_id, "admin_id": current_user.id})
     if result.rowcount == 0: raise HTTPException(404, "Leave not in your department")
-    await db.commit()
+    await activity.log(
+        db, request, action="leave.approved", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="leave", target_id=leave_id,
+        details={"employee": info["employee_name"], "employee_id": info["employee_id"],
+                 "type": info["leave_type"], "stage": "department"},
+    )
+    # Notified in the same transaction — it used to be added after the
+    # commit and never committed, so the employee was never told.
     await notify_single_user(db, current_user.tenant_id, current_user.id, info["employee_id"], "leave_dept_approved", "Leave Approved (Department)", f"Your {info['leave_type']} leave was approved by department head")
+    await db.commit()
     return {"message": "Leave approved at department level"}
 
 
 @router.patch('/leaves/{leave_id}/reject')
 async def reject_leave(
     leave_id: int,
+    request: Request,
     data: RejectIn | None = None,
     current_user: User = Depends(require_role('org_admin')),
     db: AsyncSession = Depends(get_db),
@@ -88,12 +98,20 @@ async def reject_leave(
     })
     if result.rowcount == 0:
         raise HTTPException(404, "Leave not in your department")
-    await db.commit()
 
+    await activity.log(
+        db, request, action="leave.rejected", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="leave", target_id=leave_id, reason=reason,
+        details={"employee": info["employee_name"], "employee_id": info["employee_id"],
+                 "type": info["leave_type"], "stage": "department"},
+    )
+    # Same transaction as the rejection — previously added after the commit
+    # and never saved, so the employee was never told.
     await notify_single_user(
         db, current_user.tenant_id, current_user.id, info["employee_id"],
         "leave_rejected", "Leave Rejected",
         f"Your {info['leave_type']} leave was rejected"
         + (f": {reason}" if reason else ""),
     )
+    await db.commit()
     return {"message": "Leave rejected"}

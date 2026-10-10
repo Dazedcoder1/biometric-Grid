@@ -8,12 +8,12 @@ client — GitHubRepoOut exposes only has_token / has_webhook_secret booleans.
 import secrets
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import verify_tenant_api_key
-from app.core import crypto
+from app.core import activity, crypto
 from app.db.session import get_db
 from app.models.domain import GitHubRepo, Task, Tenant, User
 from app.schemas.task_schemas import (
@@ -109,6 +109,7 @@ async def list_repos(
 @router.post("/github/repos", status_code=201)
 async def add_repo(
     data: GitHubRepoCreate,
+    request: Request,
     tenant: Tenant = Depends(verify_tenant_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -153,6 +154,11 @@ async def add_repo(
     await db.flush()
     if data.is_default:
         await _clear_other_defaults(db, tenant.id, repo.id)
+    await activity.log(
+        db, request, action="github.repo_added", tenant_id=tenant.id,
+        target_type="github_repo", target_id=repo.id,
+        details={"repo": repo.full_name, "is_default": bool(repo.is_default)},
+    )
     await db.commit()
     await db.refresh(repo)
 
@@ -172,6 +178,7 @@ async def add_repo(
 async def update_repo(
     repo_id: int,
     data: GitHubRepoUpdate,
+    request: Request,
     tenant: Tenant = Depends(verify_tenant_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -210,6 +217,12 @@ async def update_repo(
                 raise HTTPException(400, "An inactive repository cannot be the default")
             await _clear_other_defaults(db, tenant.id, repo.id)
 
+    if payload:
+        await activity.log(
+            db, request, action="github.repo_updated", tenant_id=tenant.id,
+            target_type="github_repo", target_id=repo.id,
+            details={"repo": repo.full_name, "fields": sorted(payload)},
+        )
     await db.commit()
     await db.refresh(repo)
     return await _serialize(db, repo)
@@ -342,6 +355,7 @@ async def list_user_mapping(
 async def set_user_mapping(
     user_id: int,
     data: GitHubUsernameUpdate,
+    request: Request,
     tenant: Tenant = Depends(verify_tenant_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -355,6 +369,11 @@ async def set_user_mapping(
 
     username = (data.github_username or "").strip().lstrip("@")
     user.github_username = username or None
+    await activity.log(
+        db, request, action="github.user_mapped", tenant_id=tenant.id,
+        target_type="user", target_id=user.id,
+        details={"name": user.name, "github_username": user.github_username},
+    )
     await db.commit()
     return {"id": user.id, "name": user.name, "github_username": user.github_username}
 
@@ -362,6 +381,7 @@ async def set_user_mapping(
 @router.delete("/github/repos/{repo_id}")
 async def remove_repo(
     repo_id: int,
+    request: Request,
     delete_tasks: bool = False,
     tenant: Tenant = Depends(verify_tenant_api_key),
     db: AsyncSession = Depends(get_db),
@@ -387,6 +407,11 @@ async def remove_repo(
             await db.delete(t)
         removed = len(tasks)
 
+    await activity.log(
+        db, request, action="github.repo_removed", tenant_id=tenant.id,
+        target_type="github_repo", target_id=repo.id,
+        details={"repo": repo.full_name, "tasks_deleted": removed},
+    )
     await db.delete(repo)
     await db.commit()
     return {

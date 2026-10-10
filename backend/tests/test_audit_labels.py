@@ -28,8 +28,11 @@ from app.api.routes.vault.activity import (
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
 
 #: `action=` is also a parameter name elsewhere (dependency_service.impact_of
-#: takes action="rotate"), so restrict the scan to calls into the audit writer.
-AUDIT_CALL = re.compile(r"audit\.record\s*\((?:[^()]|\([^()]*\))*?\)", re.S)
+#: takes action="rotate"), so restrict the scan to calls into the audit writer:
+#: audit.record directly, or activity.log, which every non-vault route uses.
+AUDIT_CALL = re.compile(
+    r"(?:audit\.record|activity\.log)\s*\((?:[^()]|\([^()]*\))*?\)", re.S
+)
 ACTION_ARG = re.compile(r'action\s*=\s*"([a-z_][a-z_.]*)"')
 
 

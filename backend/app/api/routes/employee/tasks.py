@@ -7,7 +7,7 @@ they may change is status. Everything else is set by an admin.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.domain import Task, TaskComment, User
 from app.schemas.task_schemas import CommentCreate, TaskStatusUpdate
+from app.core import activity
 from app.services import task_service as svc
 
 router = APIRouter()
@@ -77,11 +78,18 @@ async def my_stats(
 async def update_own_status(
     task_id: int,
     data: TaskStatusUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     task = await _own_task_or_404(db, current_user, task_id)
+    previous = task.status
     await svc.apply_status_change(task, data.status)
+    await activity.log(
+        db, request, action="task.status_changed", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="task", target_id=task.id,
+        details={"title": task.title, "from": previous, "to": data.status},
+    )
     await db.commit()
     await db.refresh(task)
 
@@ -117,6 +125,7 @@ async def list_comments(
 async def add_comment(
     task_id: int,
     data: CommentCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -126,6 +135,10 @@ async def add_comment(
         author_name=current_user.name, body=data.body,
     )
     db.add(comment)
+    await activity.log(
+        db, request, action="task.commented", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="task", target_id=task.id, details={"title": task.title},
+    )
     await db.commit()
     await db.refresh(comment)
 

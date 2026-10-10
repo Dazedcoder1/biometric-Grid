@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from pydantic import BaseModel, Field
@@ -30,7 +31,7 @@ async def get_settings(tenant: Tenant = Depends(verify_tenant_api_key), db: Asyn
     return {**settings, "is_default": False}
 
 @router.put('/settings')
-async def update_settings(data: SettingsUpdate, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
+async def update_settings(data: SettingsUpdate, request: Request, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     await db.execute(text("""
         INSERT INTO settings (tenant_id, office_start_time, office_end_time, late_threshold_minutes, working_days, min_working_hours)
         VALUES (:tenant_id, :ost, :oet, :lt, :wd, :mwh)
@@ -39,6 +40,13 @@ async def update_settings(data: SettingsUpdate, tenant: Tenant = Depends(verify_
         working_days=EXCLUDED.working_days, min_working_hours=EXCLUDED.min_working_hours
     """), {"tenant_id": tenant.id, "ost": data.office_start_time, "oet": data.office_end_time,
            "lt": data.late_threshold_minutes, "wd": data.working_days, "mwh": data.min_working_hours})
+    await activity.log(
+        db, request, action="settings.updated", tenant_id=tenant.id, target_type="settings",
+        details={"office_hours": f"{data.office_start_time}-{data.office_end_time}",
+                 "grace_minutes": data.late_threshold_minutes,
+                 "working_days": data.working_days,
+                 "min_working_hours": data.min_working_hours},
+    )
     await db.commit()
     return {"message": "Settings updated"}
 
@@ -49,6 +57,7 @@ class ApiKeyChange(BaseModel):
 @router.post('/change-api-key')
 async def change_api_key(
     data: ApiKeyChange,
+    request: Request,
     tenant: Tenant = Depends(verify_tenant_api_key),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,6 +91,13 @@ async def change_api_key(
 
     row = (await db.execute(select(Tenant).where(Tenant.id == tenant.id))).scalars().first()
     row.api_key = data.api_key
+    # Never the key itself — only its last four characters, enough to match
+    # against a device's config without being usable.
+    await activity.log(
+        db, request, action="organisation.api_key_changed", tenant_id=tenant.id,
+        target_type="organisation", target_id=tenant.id,
+        details={"new_key_ends": data.api_key[-4:]},
+    )
     await db.commit()
 
     return {

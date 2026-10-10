@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core import activity
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from sqlalchemy.future import select
@@ -44,7 +45,7 @@ async def list_employees(current_user: User = Depends(require_role('org_admin'))
     return result.scalars().all()
 
 @router.post('/employees')
-async def create_employee(data: EmployeeCreate, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
+async def create_employee(data: EmployeeCreate, request: Request, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
     tenant_id = current_user.tenant_id
     dept_id   = current_user.dept_id
     auto_generated = {"employee_code": False, "finger_id": False, "password": False}
@@ -76,31 +77,50 @@ async def create_employee(data: EmployeeCreate, current_user: User = Depends(req
             raise HTTPException(400, f"Finger ID {data.finger_id} already assigned")
     user = User(tenant_id=tenant_id, employee_code=data.employee_code, name=data.name, email=None, dept_id=dept_id, finger_id=data.finger_id, role='employee', password_hash=hash_password(original_password))
     db.add(user)
+    await db.flush()
+    await activity.log(
+        db, request, action="user.created", tenant_id=tenant_id, actor=current_user,
+        target_type="user", target_id=user.id,
+        details={"name": user.name, "employee_code": user.employee_code, "finger_id": user.finger_id},
+    )
+    # In the same transaction. It used to be added after the commit and
+    # never committed, so this notification was silently lost.
+    await notify_single_user(db, tenant_id, current_user.id, current_user.id, "employee_added", "New Employee Added", f"{user.name} ({user.employee_code}) added to your department")
     await db.commit()
     await db.refresh(user)
-    await notify_single_user(db, tenant_id, current_user.id, current_user.id, "employee_added", "New Employee Added", f"{user.name} ({user.employee_code}) added to your department")
     return {"message": "Employee created", "credentials": {"name": user.name, "employee_code": user.employee_code, "password": original_password, "finger_id": user.finger_id}, "auto_generated": auto_generated}
 
 @router.put('/employees/{employee_id}')
-async def update_employee(employee_id: int, data: EmployeeUpdate, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
+async def update_employee(employee_id: int, data: EmployeeUpdate, request: Request, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == employee_id, User.tenant_id == current_user.tenant_id, User.dept_id == current_user.dept_id, User.role == 'employee'))
     employee = result.scalars().first()
     if not employee: raise HTTPException(404, "Employee not found")
+    changed = [f for f in ("name", "finger_id", "is_active") if getattr(data, f) is not None]
     if data.name is not None: employee.name = data.name
     if data.finger_id is not None: employee.finger_id = data.finger_id
     if data.is_active is not None:
         employee.is_active = data.is_active
         if not data.is_active: employee.finger_id = None
+    if changed:
+        await activity.log(
+            db, request, action="user.updated", tenant_id=current_user.tenant_id, actor=current_user,
+            target_type="user", target_id=employee.id,
+            details={"name": employee.name, "fields": changed},
+        )
     await db.commit()
     return {"message": "Employee updated"}
 
 @router.delete('/employees/{employee_id}')
-async def delete_employee(employee_id: int, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
+async def delete_employee(employee_id: int, request: Request, current_user: User = Depends(require_role('org_admin')), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == employee_id, User.tenant_id == current_user.tenant_id, User.dept_id == current_user.dept_id, User.role == 'employee'))
     employee = result.scalars().first()
     if not employee: raise HTTPException(404, "Employee not found")
     employee.is_active = False
     employee.finger_id = None
+    await activity.log(
+        db, request, action="user.deactivated", tenant_id=current_user.tenant_id, actor=current_user,
+        target_type="user", target_id=employee.id, details={"name": employee.name},
+    )
     await db.commit()
     return {"message": "Employee deactivated"}
 
@@ -108,6 +128,7 @@ async def delete_employee(employee_id: int, current_user: User = Depends(require
 async def assign_fingerprint(
     employee_id: int,
     data: AssignFingerprintRequest,
+    request: Request,
     current_user: User = Depends(require_role('org_admin')),
     db: AsyncSession = Depends(get_db),
 ):
@@ -149,7 +170,13 @@ async def assign_fingerprint(
             "Pick a free slot, or clear theirs first.",
         )
 
+    previous = employee.finger_id
     employee.finger_id = data.finger_id
+    await activity.log(
+        db, request, action="user.fingerprint_assigned", tenant_id=current_user.tenant_id,
+        actor=current_user, target_type="user", target_id=employee.id,
+        details={"name": employee.name, "from": previous, "to": data.finger_id},
+    )
     await db.commit()
     return {
         "message": f"Finger ID {data.finger_id} assigned to {employee.name}",

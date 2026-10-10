@@ -50,6 +50,30 @@ CATALOGUE: tuple[PermissionDef, ...] = (
         "Decrypt and see a secret value",
         requires_step_up=True,
     ),
+    # Oversight: an administrator looking into the vaults of the people they
+    # administer, without a share. Separate from credential.reveal on purpose —
+    # that one is about your own and shared items, and every employee holds it.
+    # Scope (whose vaults) is decided in oversight_service, not here.
+    PermissionDef(
+        "credential.oversee",
+        "See and reveal credentials in the vaults of people you administer",
+        requires_step_up=True,
+    ),
+
+    # ─── Dependency map ──────────────────────────────────────────────────────
+    # Which department a system belongs to decides who sees it on the map.
+    # Org Admins may only move systems between their own department and
+    # shared — dependency_service.move_system enforces that.
+    PermissionDef(
+        "system.manage",
+        "Move a system between departments, or make it shared",
+    ),
+
+    # ─── Accounts ────────────────────────────────────────────────────────────
+    PermissionDef(
+        "user.password_reset",
+        "Issue a temporary sign-in password to someone you administer",
+    ),
 
     # ─── Sharing (Phase 5) ───────────────────────────────────────────────────
     PermissionDef("share.view", "See who a credential is shared with"),
@@ -92,9 +116,11 @@ SYSTEM_ROLES: dict[str, dict] = {
             "vault.view", "vault.manage",
             "rack.view", "rack.manage",
             "credential.view", "credential.create", "credential.edit", "credential.delete",
-            "credential.reveal",
+            "credential.reveal", "credential.oversee",
             "share.view", "share.grant", "share.revoke",
             "audit.view",
+            "user.password_reset",
+            "system.manage",
             # credential.reveal was withheld here while the only way to be a
             # Tenant Admin was a long-lived API key: a key carries a tenant and
             # not a person, so the audit log could not name who held it, and a
@@ -121,6 +147,10 @@ SYSTEM_ROLES: dict[str, dict] = {
             "vault.view", "rack.view", "rack.manage",
             "credential.view", "credential.create", "credential.edit",
             "credential.reveal",
+            # Limited by oversight_service to employees in their own
+            # department — never another admin, never another department.
+            "credential.oversee", "user.password_reset",
+            "system.manage",
             "share.view", "share.grant", "share.revoke",
             # The audit log is scoped to the caller's tenant, so this shows an
             # Org Admin their own organisation and nothing else. Withholding it

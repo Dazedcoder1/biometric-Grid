@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps_security import (
@@ -25,7 +25,8 @@ from app.api.deps_security import (
 )
 from app.core import audit
 from app.db.session import get_db
-from app.models.domain import User
+from app.models.credentials import Credential, System
+from app.models.domain import Leave, Task, Tenant, User
 from app.models.security import AuditLog
 from app.services import vault_service as svc
 
@@ -35,6 +36,9 @@ router = APIRouter()
 #: log — logins, MFA, role changes — is noise at this zoom level.
 CREDENTIAL_ACTIONS = (
     "credential.created", "credential.viewed", "credential.revealed",
+    # An administrator looking at it from the People page belongs on the
+    # owner's timeline more than anything else here.
+    "credential.revealed_by_admin", "credential.changed_by_admin",
     "credential.copied", "credential.updated", "credential.rotated",
     "credential.deleted", "credential.tamper_detected",
     "share.granted", "share.revoked", "share.expired",
@@ -67,6 +71,61 @@ LABELS = {
     "credential.rotation_impact": "recorded rotation impact",
     "credential.deleted": "deleted",
     "credential.tamper_detected": "INTEGRITY FAILURE",
+    # oversight — an administrator acting on someone else's vault or account
+    "credential.revealed_by_admin": "revealed someone else's secret as their administrator",
+    "credential.changed_by_admin": "changed someone else's saved password",
+    "vault.oversight_viewed": "looked through someone else's vault",
+    "user.password_reset": "reset someone's sign-in password",
+
+    # ── Everything outside the vault, recorded through app/core/activity.py ──
+
+    # signing in
+    "auth.signed_in": "signed in",
+    "auth.sign_in_failed": "failed to sign in",
+    "auth.signed_out": "signed out",
+    "auth.password_changed": "changed their password",
+    "auth.password_change_failed": "entered the wrong current password",
+
+    # people and departments
+    "user.created": "added an employee",
+    "user.updated": "edited an employee",
+    "user.deactivated": "deactivated an employee",
+    "user.fingerprint_assigned": "assigned a fingerprint slot",
+    "user.profile_updated": "updated their profile",
+    "org_admin.created": "added an Org Admin",
+    "org_admin.updated": "edited an Org Admin",
+    "org_admin.deactivated": "deactivated an Org Admin",
+    "department.created": "created a department",
+    "department.renamed": "renamed a department",
+    "department.deleted": "deleted a department",
+
+    # leave, holidays and office hours
+    "leave.requested": "requested leave",
+    "leave.cancelled": "cancelled a leave request",
+    "leave.approved": "approved leave",
+    "leave.rejected": "rejected leave",
+    "holiday.created": "added a holiday",
+    "holiday.updated": "edited a holiday",
+    "holiday.deleted": "removed a holiday",
+    "settings.updated": "changed office hours",
+
+    # devices and the organisation's key
+    "device.created": "registered a device",
+    "device.updated": "updated a device",
+    "device.deleted": "removed a device",
+    "device.command_sent": "sent a device command",
+    "organisation.api_key_changed": "changed the organisation's API key",
+
+    # tasks
+    "task.created": "created a task",
+    "task.updated": "edited a task",
+    "task.deleted": "deleted a task",
+    "task.commented": "commented on a task",
+    "task.status_changed": "changed a task's status",
+    "github.repo_added": "connected a GitHub repository",
+    "github.repo_updated": "changed a GitHub repository's settings",
+    "github.repo_removed": "disconnected a GitHub repository",
+    "github.user_mapped": "linked a GitHub username",
 
     # sharing and ownership
     "share.granted": "shared",
@@ -90,6 +149,7 @@ LABELS = {
     # structure
     "rack.created": "created a rack",
     "system.created": "registered a system",
+    "system.department_changed": "moved a system to another department",
     "dependency.linked": "linked a credential to a system",
     "dependency.unlinked": "unlinked a credential from a system",
     "rotation_policy.created": "set a rotation policy",
@@ -122,6 +182,19 @@ CATEGORIES = {
     "rotation_policy": "structure",
     "audit": "audit",
     "organisation": "platform",
+    # Admin oversight of another person's vault.
+    "vault": "access",
+    # Outside the vault — see app/core/activity.py.
+    "auth": "auth",
+    "user": "people",
+    "org_admin": "people",
+    "department": "people",
+    "leave": "attendance",
+    "holiday": "attendance",
+    "settings": "attendance",
+    "device": "devices",
+    "task": "tasks",
+    "github": "tasks",
 }
 
 
@@ -144,9 +217,14 @@ def _category(action: str) -> str:
     return CATEGORIES.get(action.split(".", 1)[0], "other")
 
 
-def _row(e: AuditLog, names: dict[int, str] | None = None) -> dict:
+def _row(e: AuditLog, names: dict[int, str] | None = None,
+         orgs: dict[int, str] | None = None) -> dict:
     return {
         "seq": e.seq,
+        "tenant_id": e.tenant_id,
+        # Only filled for a Super Admin's all-organisations view, where rows
+        # from different companies sit side by side.
+        "organisation": (orgs or {}).get(e.tenant_id),
         "occurred_at": e.occurred_at,
         "actor_id": e.actor_id,
         "actor_name": (names or {}).get(e.actor_id),
@@ -187,6 +265,80 @@ async def _actor_names(db: AsyncSession, rows) -> dict[int, str]:
         uid: (name or email or f"User {uid}")
         for uid, name, email in result.all()
     }
+
+
+async def _org_names(db: AsyncSession, rows) -> dict[int, str]:
+    """Organisation names for this page of rows — one query, page-bounded."""
+    ids = {e.tenant_id for e in rows if e.tenant_id is not None}
+    if not ids:
+        return {}
+    result = await db.execute(select(Tenant.id, Tenant.name).where(Tenant.id.in_(ids)))
+    return dict(result.all())
+
+
+def scope_conditions(ctx: SecurityContext, all_orgs: bool = False) -> list:
+    """
+    Which audit entries this person may read. One rule for the log, the
+    action filter, the summary strip and the CSV export, so none of them can
+    show more than the others.
+
+        Super Admin    the organisation they are working in, or every
+                       organisation with all_orgs
+        Tenant Admin   their organisation
+        anyone else    their organisation, narrowed to their department:
+                       entries BY someone in it, or ABOUT someone in it,
+                       their credentials, leave or tasks, the department's
+                       systems, or the department itself
+
+    The same department line as People and the Dependency Map. An Org Admin
+    sees what happens in Operations — including a Tenant Admin acting on
+    Operations' people — and nothing about Engineering. Organisation-wide
+    entries (office hours, API key, other departments) stay with the Tenant
+    Admin. Someone with no department sees only their own actions.
+    """
+    if ctx.permissions.grants_all:
+        acting = getattr(ctx, "acting_tenant_id", None)
+        if all_orgs or acting is None:
+            return []
+        return [AuditLog.tenant_id == acting]
+
+    user = ctx.user
+    in_tenant = AuditLog.tenant_id == user.tenant_id
+    if user.role == "tenant_admin":
+        return [in_tenant]
+
+    if user.dept_id is None:
+        return [in_tenant, AuditLog.actor_id == user.id]
+
+    people = select(User.id).where(User.tenant_id == user.tenant_id, User.dept_id == user.dept_id)
+    people_s = select(cast(User.id, String)).where(
+        User.tenant_id == user.tenant_id, User.dept_id == user.dept_id)
+    creds_s = select(cast(Credential.id, String)).where(
+        Credential.tenant_id == user.tenant_id, Credential.owner_id.in_(people))
+    systems_s = select(cast(System.id, String)).where(
+        System.tenant_id == user.tenant_id, System.department_id == user.dept_id)
+    leaves_s = select(cast(Leave.leave_id, String)).where(
+        Leave.tenant_id == user.tenant_id, Leave.employee_id.in_(people))
+    tasks_s = select(cast(Task.id, String)).where(
+        Task.tenant_id == user.tenant_id,
+        or_(Task.dept_id == user.dept_id, Task.assigned_to.in_(people)))
+
+    # target_id is stored as text (it holds device names too), hence the casts.
+    def about(kind, ids_as_text):
+        return (AuditLog.target_type == kind) & AuditLog.target_id.in_(ids_as_text)
+
+    return [
+        in_tenant,
+        or_(
+            AuditLog.actor_id.in_(people),
+            about("user", people_s),
+            about("credential", creds_s),
+            about("system", systems_s),
+            about("leave", leaves_s),
+            about("task", tasks_s),
+            (AuditLog.target_type == "department") & (AuditLog.target_id == str(user.dept_id)),
+        ),
+    ]
 
 
 @router.get("/credentials/{credential_id}/activity")
@@ -232,8 +384,10 @@ async def audit_log(
     target_type: str | None = None,
     target_id: str | None = None,
     result: str | None = None,
+    category: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    all_orgs: bool = False,
     limit: int = Query(100, le=1000),
     offset: int = 0,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
@@ -242,16 +396,13 @@ async def audit_log(
     """
     The audit log, filtered.
 
-    Scoped to the caller's tenant unless they hold `grants_all`. Without that
-    scoping, `audit.view` on one tenant would expose every other tenant's
-    activity.
+    Scoped by scope_conditions: organisation for a Tenant Admin, department
+    for everyone else, everything for a Super Admin.
     """
     q = select(AuditLog)
     count_q = select(func.count(AuditLog.id))
 
-    conditions = []
-    if not ctx.permissions.grants_all:
-        conditions.append(AuditLog.tenant_id == ctx.user.tenant_id)
+    conditions = list(scope_conditions(ctx, all_orgs))
     if actor_id is not None:
         conditions.append(AuditLog.actor_id == actor_id)
     if action:
@@ -262,6 +413,14 @@ async def audit_log(
         conditions.append(AuditLog.target_id == str(target_id))
     if result:
         conditions.append(AuditLog.result == result)
+    if category:
+        # A category is a set of namespaces ("people" = user, org_admin,
+        # department). An unknown one matches nothing rather than everything.
+        namespaces = [ns for ns, cat in CATEGORIES.items() if cat == category]
+        conditions.append(
+            or_(*[AuditLog.action.like(f"{ns}.%") for ns in namespaces])
+            if namespaces else AuditLog.id.is_(None)
+        )
     if since:
         conditions.append(AuditLog.occurred_at >= since)
     if until:
@@ -278,24 +437,26 @@ async def audit_log(
         )
     ).scalars().all()
     names = await _actor_names(db, rows)
+    orgs = await _org_names(db, rows) if ctx.permissions.grants_all else {}
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "entries": [_row(e, names) for e in rows],
+        "entries": [_row(e, names, orgs) for e in rows],
     }
 
 
 @router.get("/audit/actions")
 async def known_actions(
+    all_orgs: bool = False,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
     db: AsyncSession = Depends(get_db),
 ):
     """Distinct actions present, so the filter dropdown reflects reality."""
     q = select(AuditLog.action, func.count(AuditLog.id)).group_by(AuditLog.action)
-    if not ctx.permissions.grants_all:
-        q = q.where(AuditLog.tenant_id == ctx.user.tenant_id)
+    for c in scope_conditions(ctx, all_orgs):
+        q = q.where(c)
 
     rows = (await db.execute(q.order_by(AuditLog.action))).all()
     return [
@@ -310,6 +471,7 @@ async def export_csv(
     until: datetime | None = None,
     action: str | None = None,
     actor_id: int | None = None,
+    all_orgs: bool = False,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -324,8 +486,8 @@ async def export_csv(
     kind of action the audit log exists to record.
     """
     q = select(AuditLog)
-    if not ctx.permissions.grants_all:
-        q = q.where(AuditLog.tenant_id == ctx.user.tenant_id)
+    for c in scope_conditions(ctx, all_orgs):
+        q = q.where(c)
     if since:
         q = q.where(AuditLog.occurred_at >= since)
     if until:
@@ -412,6 +574,7 @@ async def integrity(
 @router.get("/audit/summary")
 async def summary(
     days: int = Query(7, le=90),
+    all_orgs: bool = False,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -419,8 +582,8 @@ async def summary(
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     base = select(AuditLog).where(AuditLog.occurred_at >= since)
-    if not ctx.permissions.grants_all:
-        base = base.where(AuditLog.tenant_id == ctx.user.tenant_id)
+    for c in scope_conditions(ctx, all_orgs):
+        base = base.where(c)
     sub = base.subquery()
 
     by_action = (

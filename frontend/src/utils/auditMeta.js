@@ -8,23 +8,55 @@
 // only decides the icon and the colour.
 
 import {
-  Building2, Database, FileDown, KeyRound, Network, ShieldCheck, Users,
+  Building2, CalendarDays, CheckSquare, Cpu, Database, FileDown, KeyRound,
+  Network, ShieldCheck, UserCog, Users,
 } from 'lucide-react';
 
+// Order here is the order of the category filter on the audit page.
 export const CATEGORY_META = {
-  credential: { icon: KeyRound,    label: 'Credential', tint: 'var(--teal)' },
-  access:     { icon: Users,       label: 'Access',     tint: 'var(--info)' },
-  auth:       { icon: ShieldCheck, label: 'Sign-in',    tint: '#a855f7' },
-  structure:  { icon: Network,     label: 'Structure',  tint: 'var(--text3)' },
-  audit:      { icon: FileDown,    label: 'Audit',      tint: 'var(--warn)' },
+  auth:       { icon: ShieldCheck,  label: 'Sign-in',           tint: '#a855f7' },
+  people:     { icon: UserCog,      label: 'People',            tint: '#22c55e' },
+  attendance: { icon: CalendarDays, label: 'Leave & attendance', tint: '#0ea5e9' },
+  devices:    { icon: Cpu,          label: 'Devices',           tint: '#f59e0b' },
+  tasks:      { icon: CheckSquare,  label: 'Tasks',             tint: '#6366f1' },
+  credential: { icon: KeyRound,     label: 'Credential',        tint: 'var(--teal)' },
+  access:     { icon: Users,        label: 'Access',            tint: 'var(--info)' },
+  structure:  { icon: Network,      label: 'Structure',         tint: 'var(--text3)' },
+  audit:      { icon: FileDown,     label: 'Audit',             tint: 'var(--warn)' },
   // A Super Admin acting on the organisation from outside it — created,
   // renamed, key rotated. Rare, and worth being able to spot at a glance.
-  platform:   { icon: Building2,   label: 'Platform',   tint: '#f472b6' },
-  other:      { icon: Database,    label: 'Other',      tint: 'var(--text3)' },
+  platform:   { icon: Building2,    label: 'Platform',          tint: '#f472b6' },
+  other:      { icon: Database,     label: 'Other',             tint: 'var(--text3)' },
 };
 
 export function categoryMeta(category) {
   return CATEGORY_META[category] || CATEGORY_META.other;
+}
+
+/**
+ * Who acted, in words. An entry with no person behind it is not "System":
+ * it was an API key (which names an organisation, not a person), or a
+ * sign-in attempt by someone who never proved who they were.
+ */
+export function actorText(entry) {
+  if (entry.actor_name) return entry.actor_name;
+  if (entry.actor_id) return `User #${entry.actor_id}`;
+  if (entry.actor_role === 'api_key') return 'API key';
+  if (entry.actor_role === 'unknown') return 'Someone';
+  return 'System';
+}
+
+/**
+ * What an entry was about, by name where the entry recorded one, so a row
+ * reads "approved leave · Aarti Deshpande" rather than "leave 41".
+ */
+export function targetText(entry) {
+  const d = entry.details || {};
+  const name = d.name || d.employee || d.title || d.repo || d.account
+    || (entry.target_type === 'device' ? entry.target_id : null);
+  if (name) return String(name);
+  if (entry.target_type) return `${entry.target_type.replace('_', ' ')} ${entry.target_id ?? ''}`.trim();
+  return '';
 }
 
 const MINUTE = 60_000;
@@ -103,6 +135,7 @@ export function activeFilterChips(filters, actions) {
     const known = actions.find((a) => a.action === filters.action);
     chips.push({ key: 'action', label: known ? known.label : filters.action });
   }
+  if (filters.category) chips.push({ key: 'category', label: categoryMeta(filters.category).label });
   if (filters.result) chips.push({ key: 'result', label: `result: ${filters.result}` });
   if (filters.actor_id) chips.push({ key: 'actor_id', label: `actor #${filters.actor_id}` });
   if (filters.since) chips.push({ key: 'since', label: `from ${filters.since}` });

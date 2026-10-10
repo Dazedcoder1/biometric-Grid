@@ -64,7 +64,9 @@ export default function Login() {
   // Already signed in — go where this person belongs rather than showing them
   // a form they do not need.
   useEffect(() => {
-    if (!loading && user) navigate(homePathForUser(user), { replace: true });
+    if (!loading && user) {
+      navigate(user.mustChangePassword ? '/change-password' : homePathForUser(user), { replace: true });
+    }
   }, [user, loading, navigate]);
 
   const handleSubmit = async (e) => {
@@ -76,7 +78,12 @@ export default function Login() {
       const res = await authApi.login(identifier.trim(), password);
       const signedIn = login(res.access_token, { refreshToken: res.refresh_token });
 
-      navigate(destinationFor(signedIn, location.state?.from), { replace: true });
+      navigate(
+        signedIn.mustChangePassword
+          ? '/change-password'
+          : destinationFor(signedIn, location.state?.from),
+        { replace: true },
+      );
     } catch (err) {
       // The server does not say which half was wrong, and neither do we: an
       // error that distinguishes "no such user" from "wrong password" confirms

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Moon, Sun, Bell, Menu, User, LogOut,
-  AlertTriangle, CheckCircle, ClipboardList, Clock, Fingerprint, UserPlus, UserX, XCircle,
+  AlertTriangle, CheckCircle, ClipboardList, Clock, Eye, Fingerprint, KeyRound, UserPlus, UserX, XCircle,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
@@ -191,6 +191,13 @@ const Topbar = ({ title, userAbbr, bgColor, iconColor, role }) => {
         return <UserX {...props} style={{ ...props.style, color: 'var(--red)' }} />;
       case 'fingerprint_enrolled':
         return <Fingerprint {...props} />;
+      // An administrator acted on your account. Amber: not necessarily wrong,
+      // but something you should notice.
+      case 'vault_admin_reveal':
+        return <Eye {...props} style={{ ...props.style, color: 'var(--amber)' }} />;
+      case 'vault_admin_change':
+      case 'password_reset_by_admin':
+        return <KeyRound {...props} style={{ ...props.style, color: 'var(--amber)' }} />;
       default:
         return <Bell {...props} />;
     }

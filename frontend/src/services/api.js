@@ -81,6 +81,15 @@ function pickAuthHeaders(endpoint) {
   }
 
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  // A Super Admin's vault oversight, dependency map, audit log and password
+  // resets also act inside the organisation they have chosen. The server
+  // honours the header for super_admin only and ignores it for anyone else,
+  // whose organisation is fixed by their account.
+  if (endpoint.startsWith('/api/vault') || endpoint.startsWith('/api/accounts')) {
+    const acting = getActingTenantId();
+    if (acting) headers['X-Acting-Tenant-Id'] = acting;
+  }
   return headers;
 }
 
@@ -105,12 +114,23 @@ async function apiRequest(endpoint, options = {}) {
     // Carried through so callers can react to specific failures — the reveal
     // flow needs to distinguish "re-authenticate" from a general 401.
     err.status = response.status;
+    // The structured body, for callers that act on it — e.g. a rotation
+    // refused with the list of production systems that would break.
+    err.detail = error?.detail;
     err.stepUpRequired = response.headers.get('X-Step-Up-Required');
     // A Super Admin with no organisation selected. Not a failure to show as an
     // error — the caller turns it into the organisation chooser.
     err.needsTenantChoice = (
       response.status === 409 && endpoint.startsWith(TENANT_PREFIX)
     );
+    // An admin reset this account's password while this tab was signed in, so
+    // the token predates the reset and carries no must_change_password claim.
+    // The server refuses everything until a new password is chosen; go there
+    // rather than leaving every screen to show the same error.
+    if (response.headers.get('X-Password-Change-Required')
+        && window.location.pathname !== '/change-password') {
+      window.location.assign('/change-password');
+    }
     throw err;
   }
 
@@ -376,9 +396,21 @@ export const authApi = {
     localStorage.removeItem('user');
   },
   
+  /** { old_password, new_password } -> { message, access_token, refresh_token } */
   changePassword: (data) => apiRequest('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
-  setPassword: (data) => apiRequest('/api/auth/set-password', { method: 'POST', body: JSON.stringify(data) }),
   createSuperAdmin: (data) => apiRequest('/api/auth/setup/super-admin', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ==================== ACCOUNTS ====================
+// Admin resets. Scoped server-side to the people the caller administers.
+// Replaces authApi.setPassword, whose route let any Org Admin set anyone's
+// password in any organisation.
+export const accountsApi = {
+  /** Generates a temporary password unless one is given. Returned once. */
+  resetPassword: (userId, temporaryPassword) => apiRequest(`/api/accounts/${userId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ temporary_password: temporaryPassword || null }),
+  }),
 };
 
 // ─── Credential vault ────────────────────────────────────────────────────────
@@ -452,6 +484,25 @@ export const vaultApi = {
   recordCopy: (id) =>
     apiRequest(`/api/vault/credentials/${id}/copied`, { method: 'POST' }),
 
+  // Oversight — an admin looking into the vaults of the people they
+  // administer. Reveals need a step-up token issued for 'credential.oversee'
+  // (not 'credential.reveal'), are audited, and notify the owner.
+  oversightPeople: () => apiRequest('/api/vault/oversight/people'),
+  oversightCredentials: (userId) =>
+    apiRequest(`/api/vault/oversight/people/${userId}/credentials`),
+  oversightReveal: (credentialId, stepUpToken) =>
+    apiRequest(`/api/vault/oversight/credentials/${credentialId}/reveal`, {
+      method: 'POST',
+      headers: { 'X-Step-Up-Token': stepUpToken },
+    }),
+  // Super Admin only: put a new password into someone else's credential.
+  oversightChange: (credentialId, stepUpToken, secret, acknowledgeImpact = false) =>
+    apiRequest(`/api/vault/oversight/credentials/${credentialId}/change`, {
+      method: 'POST',
+      headers: { 'X-Step-Up-Token': stepUpToken },
+      body: JSON.stringify({ secret, acknowledge_impact: acknowledgeImpact }),
+    }),
+
   // Sharing
   sharedWithMe: () => apiRequest('/api/vault/shared-with-me'),
   shareTree: (credentialId) =>
@@ -478,8 +529,14 @@ export const vaultApi = {
       method: 'POST', body: JSON.stringify(data),
     }),
 
-  // Dependencies
+  // Dependencies — scoped by department on the server: a Tenant Admin sees
+  // every system, everyone else their own department's plus shared ones.
   systems: () => apiRequest('/api/vault/systems'),
+  /** departmentId null = shared with the whole organisation. */
+  moveSystem: (systemId, departmentId) =>
+    apiRequest(`/api/vault/systems/${systemId}`, {
+      method: 'PATCH', body: JSON.stringify({ department_id: departmentId }),
+    }),
   dependencies: (credentialId) =>
     apiRequest(`/api/vault/credentials/${credentialId}/dependencies`),
   addDependency: (credentialId, data) =>
@@ -505,8 +562,12 @@ export const vaultApi = {
     const qs = q.toString();
     return apiRequest(`/api/vault/audit${qs ? `?${qs}` : ''}`);
   },
-  auditActions: () => apiRequest('/api/vault/audit/actions'),
-  auditSummary: (days = 7) => apiRequest(`/api/vault/audit/summary?days=${days}`),
+  // allOrgs: a Super Admin's view of every organisation at once. Ignored by
+  // the server for anyone else.
+  auditActions: (allOrgs = false) =>
+    apiRequest(`/api/vault/audit/actions${allOrgs ? '?all_orgs=true' : ''}`),
+  auditSummary: (days = 7, allOrgs = false) =>
+    apiRequest(`/api/vault/audit/summary?days=${days}${allOrgs ? '&all_orgs=true' : ''}`),
   auditIntegrity: () => apiRequest('/api/vault/audit/integrity'),
 
   /**
@@ -522,10 +583,10 @@ export const vaultApi = {
       if (v !== undefined && v !== null && v !== '') q.set(k, v);
     });
 
-    const token = localStorage.getItem('access_token');
     const response = await fetch(
       `${API_BASE_URL}/api/vault/audit/export.csv?${q.toString()}`,
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      // Same headers as every other vault call, acting organisation included.
+      { headers: pickAuthHeaders('/api/vault/audit/export.csv') },
     );
     if (!response.ok) throw new Error(`Export failed (${response.status})`);
 

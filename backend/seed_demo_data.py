@@ -515,14 +515,25 @@ async def build_vault(db, tenant, org_admin, employees) -> None:
                                   expires_at=NOW + timedelta(days=2))
         shares += 1
 
+    # Systems belong to departments, so the map can be shown per department.
+    # First department gets the production services, the last gets staging,
+    # and one stays shared so "everyone sees shared systems" has something to
+    # show. With a single department (Harbour) the first and last coincide.
+    depts = (await db.execute(
+        select(Department).where(Department.tenant_id == tenant.id)
+        .order_by(Department.department_id))).scalars().all()
+    first_dept = depts[0].department_id if depts else None
+    last_dept = depts[-1].department_id if depts else None
+
     systems = []
-    for name, kind, env in [
-        ("payments-api", "service", "production"),
-        ("warehouse-scanner", "service", "production"),
-        ("staging-api", "service", "staging"),
-        ("nightly-etl", "job", "production"),
+    for name, kind, env, dept in [
+        ("payments-api", "service", "production", first_dept),
+        ("warehouse-scanner", "service", "production", first_dept),
+        ("staging-api", "service", "staging", last_dept),
+        ("nightly-etl", "job", "production", None),   # shared
     ]:
-        system = System(tenant_id=tenant.id, name=name, kind=kind, environment=env)
+        system = System(tenant_id=tenant.id, name=name, kind=kind,
+                        environment=env, department_id=dept)
         db.add(system)
         systems.append(system)
     await db.flush()

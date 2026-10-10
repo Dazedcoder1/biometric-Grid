@@ -128,8 +128,12 @@ app.include_router(org_activity_router, prefix=ORG_PREFIX, tags=["Org Admin"])
 # is not a Tenant Admin — so org and employee pages silently fell back to
 # hardcoded defaults. See routes/common/settings.py.
 from app.api.routes.common.settings import router as common_settings_router
+from app.api.routes.common.accounts import router as common_accounts_router
 
 app.include_router(common_settings_router, prefix="/api", tags=["Shared"])
+# Admin password resets, scoped by oversight_service. Replaces the unscoped
+# /api/auth/set-password. See routes/common/accounts.py.
+app.include_router(common_accounts_router, prefix="/api", tags=["Accounts"])
 
 # ─── Employee (uses JWT Bearer) ───────────────────────────────────────────────
 from app.api.routes.employee.dashboard      import router as emp_dash_router
@@ -175,6 +179,7 @@ from app.api.routes.vault.activity import router as vault_activity_router
 from app.api.routes.vault.credentials import router as vault_credentials_router
 from app.api.routes.vault.dependencies import router as vault_dependencies_router
 from app.api.routes.vault.mfa import router as vault_mfa_router
+from app.api.routes.vault.oversight import router as vault_oversight_router
 from app.api.routes.vault.security import router as vault_security_router
 from app.api.routes.vault.shares import router as vault_shares_router
 
@@ -185,6 +190,7 @@ app.include_router(vault_shares_router, prefix=VAULT_PREFIX, tags=["Vault - Shar
 app.include_router(vault_activity_router, prefix=VAULT_PREFIX, tags=["Vault - Activity & Audit"])
 app.include_router(vault_security_router, prefix=VAULT_PREFIX, tags=["Vault - Security & Rotation"])
 app.include_router(vault_dependencies_router, prefix=VAULT_PREFIX, tags=["Vault - Dependencies"])
+app.include_router(vault_oversight_router, prefix=VAULT_PREFIX, tags=["Vault - Oversight"])
 
 
 # ─── Global error handler ─────────────────────────────────────────────────────
