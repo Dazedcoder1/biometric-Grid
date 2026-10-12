@@ -561,3 +561,61 @@ async def delete_tenant(
 
     logger.info("Organisation deleted: %s (id=%s) by user %s", name, tenant_id, current_user.id)
     return {"message": f"“{name}” was deleted."}
+
+
+class PurgeIn(BaseModel):
+    # The organisation's exact name, typed by hand. A click is not enough to
+    # erase a company; reading its name back is the deliberate step.
+    confirm_name: str = Field(..., min_length=1, max_length=120)
+
+
+@router.post("/tenants/{tenant_id}/purge")
+async def purge_tenant(
+    tenant_id: int,
+    data: PurgeIn,
+    request: Request,
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete an organisation and EVERYTHING in it — people, attendance, leave,
+    devices, tasks, vaults and credentials. Permanent.
+
+    The ordinary DELETE refuses anything that is not empty, on purpose. This
+    is the deliberate version for an organisation you mean to remove whole:
+    example data, a test company, a customer that has left. It needs the
+    organisation's exact name typed back, and it is recorded in the audit log
+    (which is never deleted) with a count of what was in it.
+
+    The deleting itself is app/services/tenant_purge.py — the same order the
+    demo seed's --reset uses.
+    """
+    from app.services.tenant_purge import purge_tenants
+
+    tenant = await _get_tenant_or_404(db, tenant_id)
+    name = tenant.name
+    if data.confirm_name.strip() != name:
+        raise HTTPException(400, f"Type the organisation's name exactly — “{name}” — to delete it.")
+
+    held = await _inventory(db, tenant.id)
+    # Written first, so the record exists even though everything it describes
+    # is about to go. audit_log has no foreign key to tenants.
+    await audit.record(
+        db, action="organisation.purged",
+        details={"name": name, "held": {b["table"]: b["count"] for b in held}},
+        **_who(request, current_user, tenant_id),
+    )
+    try:
+        await purge_tenants(db, [tenant_id])
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        logger.error("Purge of organisation %s blocked: %s", tenant_id, exc.orig)
+        raise HTTPException(
+            409,
+            "Something outside this organisation still refers to it, so nothing was "
+            "removed. The server log names the table.",
+        )
+
+    logger.info("Organisation purged: %s (id=%s) by user %s", name, tenant_id, current_user.id)
+    return {"message": f"“{name}” and everything in it was deleted."}

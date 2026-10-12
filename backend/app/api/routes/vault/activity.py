@@ -165,6 +165,7 @@ LABELS = {
     "organisation.api_key_rotated": "issued the organisation a new API key",
     "organisation.delete_refused": "tried to delete the organisation while it still held data",
     "organisation.deleted": "deleted the organisation",
+    "organisation.purged": "deleted the organisation and everything in it",
 }
 
 #: Namespace to category, so the viewer can group and colour rows without

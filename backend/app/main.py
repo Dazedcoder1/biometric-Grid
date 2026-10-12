@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting GridSphere IoT Core...")
+
+    # The platform operator's account from SUPER_ADMIN_EMAIL/PASSWORD, and
+    # the published demo Super Admin switched off. Never stops startup.
+    from app.core import bootstrap
+    await bootstrap.run()
+
     mqtt_manager.start()
 
     # Background reconcile for GitHub-mirrored tasks. Webhooks are the fast

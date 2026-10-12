@@ -334,6 +334,10 @@ export const superAdminApi = {
   renameTenant: (id, name) => apiRequest(`/api/super/tenants/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   resetTenantApiKey: (id) => apiRequest(`/api/super/tenants/${id}/reset-api-key`, { method: 'PATCH' }),
   deleteTenant: (id) => apiRequest(`/api/super/tenants/${id}`, { method: 'DELETE' }),
+  /** Deletes the organisation AND everything in it. Needs its exact name. */
+  purgeTenant: (id, confirmName) => apiRequest(`/api/super/tenants/${id}/purge`, {
+    method: 'POST', body: JSON.stringify({ confirm_name: confirmName }),
+  }),
 };
 
 // ==================== AUTH APIs ====================
