@@ -3,8 +3,8 @@
 // ============================================
 // PRODUCTION API URL - Using attendance API domain
 // ============================================
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'https://api-work.gridsphere.in';
+// Never localhost on a deployed site — see apiBase.js.
+import { API_BASE_URL } from './apiBase';
 
 const getToken = () => localStorage.getItem('access_token');
 const getApiKey = () => localStorage.getItem('api_key');

@@ -9,6 +9,8 @@ env/
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
 *.local
 
 # Databases
