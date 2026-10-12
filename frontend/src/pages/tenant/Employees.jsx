@@ -5,6 +5,7 @@ import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
 import { tenantApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import HrToggle, { HrBadge } from '../../components/HrToggle';
 
 const Employees = () => {
   const { logout } = useAuth();
@@ -222,7 +223,7 @@ const Employees = () => {
                     <User size={24} style={{ color: '#a855f7' }} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: '1rem' }}>{emp.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: '1rem' }}>{emp.name}{emp.is_hr && <HrBadge />}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                       {emp.employee_code || 'No code'}
                     </div>
@@ -259,6 +260,12 @@ const Employees = () => {
               >
                 <Eye size={14} /> View Details
               </button>
+              <div style={{ marginTop: '.6rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <HrToggle
+                  person={emp}
+                  onChange={(isHr) => setEmployees((list) => list.map((x) => (x.id === emp.id ? { ...x, is_hr: isHr } : x)))}
+                />
+              </div>
             </div>
           ))}
         </div>

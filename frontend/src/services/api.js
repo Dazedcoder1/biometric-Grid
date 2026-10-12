@@ -1,7 +1,7 @@
 
 // src/services/api.js
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'https://api-work.gridsphere.in';
+// Never localhost on a deployed site — see apiBase.js.
+import { API_BASE_URL } from './apiBase';
 
 // Helper to get auth token
 const getToken = () => localStorage.getItem('access_token');
@@ -82,11 +82,12 @@ function pickAuthHeaders(endpoint) {
 
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // A Super Admin's vault oversight, dependency map, audit log and password
-  // resets also act inside the organisation they have chosen. The server
+  // A Super Admin's vault oversight, dependency map, audit log, password
+  // resets and payroll also act inside the organisation they have chosen. The server
   // honours the header for super_admin only and ignores it for anyone else,
   // whose organisation is fixed by their account.
-  if (endpoint.startsWith('/api/vault') || endpoint.startsWith('/api/accounts')) {
+  if (endpoint.startsWith('/api/vault') || endpoint.startsWith('/api/accounts')
+      || endpoint.startsWith('/api/payroll') || endpoint.startsWith('/api/documents')) {
     const acting = getActingTenantId();
     if (acting) headers['X-Acting-Tenant-Id'] = acting;
   }
@@ -242,6 +243,142 @@ export const orgApi = {
 // answers anyone who is not a Tenant Admin with a 403 — so the Org Admin and
 // employee pages caught the error and fell back to their own hardcoded values.
 // The numbers looked authoritative and were not coming from the database.
+// Save a file the server generates (CSV, PDF) with the same headers as any
+// other call, so the acting organisation and the token go along.
+export async function downloadFile(endpoint, filename) {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers: pickAuthHeaders(endpoint) });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(describeApiError(body, response.status));
+  }
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const named = /filename="([^"]+)"/.exec(disposition);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = named ? named[1] : filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Payroll. Admin screens need payroll.view / payroll.manage / payroll.approve;
+// the /me calls are anyone's own pay.
+export const payrollApi = {
+  components: () => apiRequest('/api/payroll/components'),
+  createComponent: (data) => apiRequest('/api/payroll/components', { method: 'POST', body: JSON.stringify(data) }),
+  updateComponent: (id, data) => apiRequest(`/api/payroll/components/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  people: () => apiRequest('/api/payroll/people'),
+  person: (userId) => apiRequest(`/api/payroll/people/${userId}`),
+  saveProfile: (userId, data) => apiRequest(`/api/payroll/people/${userId}/profile`, { method: 'PUT', body: JSON.stringify(data) }),
+  addRevision: (userId, data) => apiRequest(`/api/payroll/people/${userId}/revisions`, { method: 'POST', body: JSON.stringify(data) }),
+
+  periods: () => apiRequest('/api/payroll/periods'),
+  runs: () => apiRequest('/api/payroll/runs'),
+  prepare: (period) => apiRequest('/api/payroll/runs', { method: 'POST', body: JSON.stringify({ period }) }),
+  run: (id) => apiRequest(`/api/payroll/runs/${id}`),
+  recompute: (id) => apiRequest(`/api/payroll/runs/${id}/recompute`, { method: 'POST' }),
+  adjustEntry: (id, entryId, data) => apiRequest(`/api/payroll/runs/${id}/entries/${entryId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  submit: (id) => apiRequest(`/api/payroll/runs/${id}/submit`, { method: 'POST' }),
+  approve: (id) => apiRequest(`/api/payroll/runs/${id}/approve`, { method: 'POST' }),
+  sendBack: (id, note) => apiRequest(`/api/payroll/runs/${id}/return`, { method: 'POST', body: JSON.stringify({ note }) }),
+  downloadRegister: (id, period) => downloadFile(`/api/payroll/runs/${id}/register.csv`, `payroll-register-${period}.csv`),
+  downloadSummary: (id, period) => downloadFile(`/api/payroll/runs/${id}/summary.csv`, `payroll-summary-${period}.csv`),
+  downloadPayslip: (id, entryId) => downloadFile(`/api/payroll/runs/${id}/entries/${entryId}/payslip.pdf`, 'payslip.pdf'),
+
+  claims: (status = 'pending') => apiRequest(`/api/payroll/reimbursements?status=${status}`),
+  decideClaim: (id, approve, note) => apiRequest(`/api/payroll/reimbursements/${id}/decide`, { method: 'POST', body: JSON.stringify({ approve, note }) }),
+
+  me: () => apiRequest('/api/payroll/me'),
+  myPayslips: () => apiRequest('/api/payroll/me/payslips'),
+  downloadMyPayslip: (entryId) => downloadFile(`/api/payroll/me/payslips/${entryId}/payslip.pdf`, 'payslip.pdf'),
+  myClaims: () => apiRequest('/api/payroll/me/reimbursements'),
+  submitClaim: (data) => apiRequest('/api/payroll/me/reimbursements', { method: 'POST', body: JSON.stringify(data) }),
+  withdrawClaim: (id) => apiRequest(`/api/payroll/me/reimbursements/${id}`, { method: 'DELETE' }),
+};
+
+// HR documents and letters. Uploads go as multipart FormData; apiRequest
+// leaves the Content-Type for the browser to set with the boundary.
+const form = (fields, file) => {
+  const fd = new FormData();
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') fd.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  });
+  if (file) fd.append('file', file);
+  return fd;
+};
+
+export const documentsApi = {
+  people: () => apiRequest('/api/documents/people'),
+  departments: () => apiRequest('/api/documents/departments'),
+  fields: () => apiRequest('/api/documents/fields'),
+  letterhead: () => apiRequest('/api/documents/letterhead'),
+  saveLetterhead: (data) => apiRequest('/api/documents/letterhead', { method: 'PUT', body: JSON.stringify(data) }),
+
+  templates: () => apiRequest('/api/documents/templates'),
+  addStarters: () => apiRequest('/api/documents/templates/starters', { method: 'POST' }),
+  createTemplate: (data) => apiRequest('/api/documents/templates', { method: 'POST', body: JSON.stringify(data) }),
+  updateTemplate: (id, data) => apiRequest(`/api/documents/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  templateVersions: (id) => apiRequest(`/api/documents/templates/${id}/versions`),
+
+  letters: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return apiRequest(`/api/documents/letters?${q.toString()}`);
+  },
+  prepareLetter: (data) => apiRequest('/api/documents/letters/prepare', { method: 'POST', body: JSON.stringify(data) }),
+  createLetter: (data) => apiRequest('/api/documents/letters', { method: 'POST', body: JSON.stringify(data) }),
+  letter: (id) => apiRequest(`/api/documents/letters/${id}`),
+  editLetter: (id, data) => apiRequest(`/api/documents/letters/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLetter: (id) => apiRequest(`/api/documents/letters/${id}`, { method: 'DELETE' }),
+  issueLetter: (id) => apiRequest(`/api/documents/letters/${id}/issue`, { method: 'POST' }),
+  revokeLetter: (id, reason) => apiRequest(`/api/documents/letters/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  downloadLetter: (id) => downloadFile(`/api/documents/letters/${id}/pdf`, 'letter.pdf'),
+
+  policies: () => apiRequest('/api/documents/policies'),
+  policy: (id) => apiRequest(`/api/documents/policies/${id}`),
+  createPolicy: (fields, file) => apiRequest('/api/documents/policies', { method: 'POST', body: form(fields, file) }),
+  editPolicy: (id, data) => apiRequest(`/api/documents/policies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  newPolicyVersion: (id, fields, file) => apiRequest(`/api/documents/policies/${id}/versions`, { method: 'POST', body: form(fields, file) }),
+  remindPolicy: (id) => apiRequest(`/api/documents/policies/${id}/remind`, { method: 'POST' }),
+  downloadPolicy: (id, version) => downloadFile(`/api/documents/policies/${id}/versions/${version}/file`, 'document'),
+
+  files: (userId) => apiRequest(`/api/documents/files${userId ? `?user_id=${userId}` : ''}`),
+  expiring: (days = 60) => apiRequest(`/api/documents/files/expiring?days=${days}`),
+  file: (id) => apiRequest(`/api/documents/files/${id}`),
+  addFile: (fields, file) => apiRequest('/api/documents/files', { method: 'POST', body: form(fields, file) }),
+  renewFile: (id, fields, file) => apiRequest(`/api/documents/files/${id}/versions`, { method: 'POST', body: form(fields, file) }),
+  editFile: (id, data) => apiRequest(`/api/documents/files/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  downloadFileVersion: (id, version) => downloadFile(`/api/documents/files/${id}/versions/${version}/download`, 'document'),
+
+  accessLog: (targetType, targetId) => apiRequest(`/api/documents/access-log?target_type=${targetType}&target_id=${targetId}`),
+
+  myLetters: () => apiRequest('/api/documents/me/letters'),
+  downloadMyLetter: (id) => downloadFile(`/api/documents/me/letters/${id}/pdf`, 'letter.pdf'),
+  acknowledgeLetter: (id) => apiRequest(`/api/documents/me/letters/${id}/acknowledge`, { method: 'POST' }),
+  myPolicies: () => apiRequest('/api/documents/me/policies'),
+  downloadMyPolicy: (id) => downloadFile(`/api/documents/me/policies/${id}/file`, 'document'),
+  acknowledgePolicy: (id) => apiRequest(`/api/documents/me/policies/${id}/acknowledge`, { method: 'POST' }),
+  myPending: () => apiRequest('/api/documents/me/pending'),
+  myFiles: () => apiRequest('/api/documents/me/files'),
+  downloadMyFile: (id) => downloadFile(`/api/documents/me/files/${id}/download`, 'document'),
+};
+
+// The web sign-in clock (Sign In / Sign Out, merged with the scanners).
+// Personal calls use the signed-in person's token; the team views follow
+// the same rules as the rest of their area — /api/org for an Org Admin's
+// department, /api/tenant for the whole organisation.
+export const clockApi = {
+  today: () => apiRequest('/api/clock/today'),
+  signIn: () => apiRequest('/api/clock/in', { method: 'POST' }),
+  signOut: () => apiRequest('/api/clock/out', { method: 'POST' }),
+  history: (days = 30) => apiRequest(`/api/clock/history?days=${days}`),
+  orgTeam: (date) => apiRequest(`/api/org/clock/team${date ? `?date=${date}` : ''}`),
+  tenantTeam: (date) => apiRequest(`/api/tenant/clock/team${date ? `?date=${date}` : ''}`),
+};
+
 export const commonApi = {
   getSettings: () => apiRequest('/api/settings'),
 };
@@ -415,6 +552,12 @@ export const accountsApi = {
     method: 'POST',
     body: JSON.stringify({ temporary_password: temporaryPassword || null }),
   }),
+  /** Give or take away HR access (payroll for the whole organisation). */
+  setHr: (userId, isHr) => apiRequest(`/api/accounts/${userId}/hr`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_hr: isHr }),
+  }),
+  listHr: () => apiRequest('/api/accounts/hr'),
 };
 
 // ─── Credential vault ────────────────────────────────────────────────────────

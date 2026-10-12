@@ -81,6 +81,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const performLogout = () => {
+    // The next person at this browser starts from the main sign-in.
+    try { localStorage.removeItem('portal'); } catch { /* ignore */ }
     // Listed explicitly rather than clearing everything: localStorage is shared
     // with the theme preference and anything else the app keeps, and signing
     // out should not reset the interface.

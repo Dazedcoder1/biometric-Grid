@@ -332,6 +332,8 @@ const Leaves = () => {
                     <option value="sick">Sick Leave</option>
                     <option value="casual">Casual Leave</option>
                     <option value="earned">Earned Leave</option>
+                    {/* Counted as loss of pay in payroll. */}
+                    <option value="unpaid">Leave Without Pay (unpaid)</option>
                   </select>
                 </div>
                 

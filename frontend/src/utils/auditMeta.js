@@ -8,24 +8,28 @@
 // only decides the icon and the colour.
 
 import {
-  Building2, CalendarDays, CheckSquare, Cpu, Database, FileDown, KeyRound,
+  Building2, CalendarDays, CheckSquare, Cpu, Database, FileDown, FileText, IndianRupee, KeyRound,
   Network, ShieldCheck, UserCog, Users,
 } from 'lucide-react';
 
 // Order here is the order of the category filter on the audit page.
+// Tints are theme variables (vault.css): the bright values that read on the
+// dark theme are close to invisible on white.
 export const CATEGORY_META = {
-  auth:       { icon: ShieldCheck,  label: 'Sign-in',           tint: '#a855f7' },
-  people:     { icon: UserCog,      label: 'People',            tint: '#22c55e' },
-  attendance: { icon: CalendarDays, label: 'Leave & attendance', tint: '#0ea5e9' },
-  devices:    { icon: Cpu,          label: 'Devices',           tint: '#f59e0b' },
-  tasks:      { icon: CheckSquare,  label: 'Tasks',             tint: '#6366f1' },
+  auth:       { icon: ShieldCheck,  label: 'Sign-in',           tint: 'var(--cat-auth)' },
+  people:     { icon: UserCog,      label: 'People',            tint: 'var(--cat-people)' },
+  attendance: { icon: CalendarDays, label: 'Leave & attendance', tint: 'var(--cat-attendance)' },
+  devices:    { icon: Cpu,          label: 'Devices',           tint: 'var(--cat-devices)' },
+  tasks:      { icon: CheckSquare,  label: 'Tasks',             tint: 'var(--cat-tasks)' },
+  payroll:    { icon: IndianRupee,  label: 'Payroll',           tint: 'var(--cat-payroll)' },
+  documents:  { icon: FileText,     label: 'HR documents',      tint: 'var(--cat-documents)' },
   credential: { icon: KeyRound,     label: 'Credential',        tint: 'var(--teal)' },
   access:     { icon: Users,        label: 'Access',            tint: 'var(--info)' },
   structure:  { icon: Network,      label: 'Structure',         tint: 'var(--text3)' },
   audit:      { icon: FileDown,     label: 'Audit',             tint: 'var(--warn)' },
   // A Super Admin acting on the organisation from outside it — created,
   // renamed, key rotated. Rare, and worth being able to spot at a glance.
-  platform:   { icon: Building2,    label: 'Platform',          tint: '#f472b6' },
+  platform:   { icon: Building2,    label: 'Platform',          tint: 'var(--cat-platform)' },
   other:      { icon: Database,     label: 'Other',             tint: 'var(--text3)' },
 };
 

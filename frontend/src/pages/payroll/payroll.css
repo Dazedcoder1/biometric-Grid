@@ -1,0 +1,123 @@
+/* Payroll screens. Builds on vault.css (buttons, chips, modal, banners) and
+ * clock.css (tables, tiles); only what payroll adds lives here. */
+
+.pr-head {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.pr-head h2 { margin: 0; font-size: 1.15rem; color: var(--text); }
+.pr-head .grow { flex: 1; }
+.pr-sub { font-size: .8rem; color: var(--text3); }
+
+/* Month status. Draft is neutral, submitted is waiting on someone, closed is done. */
+.pr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .15rem .6rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.pr-status.draft     { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+.pr-status.submitted { background: rgba(245,158,11,.12); color: var(--warn); }
+.pr-status.closed    { background: rgba(34,197,94,.12); color: var(--ok); }
+.pr-status.pending   { background: rgba(245,158,11,.12); color: var(--warn); }
+.pr-status.approved  { background: rgba(59,130,246,.10); color: var(--info); }
+.pr-status.paid      { background: rgba(34,197,94,.12); color: var(--ok); }
+.pr-status.rejected  { background: rgba(239,68,68,.10); color: var(--bad); }
+
+/* The draft -> submitted -> closed track at the top of a month. */
+.pr-steps { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; font-size: .76rem; color: var(--text3); }
+.pr-step { display: inline-flex; align-items: center; gap: .3rem; }
+.pr-step.done { color: var(--ok); }
+.pr-step.now { color: var(--text); font-weight: 600; }
+
+.pr-btn-primary {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .5rem .9rem; border-radius: 9px; border: none;
+  background: var(--teal); color: var(--on-teal);
+  font-family: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+}
+.pr-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.pr-btn-primary.danger { background: var(--red); color: #fff; }
+
+/* Forms */
+.pr-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem .9rem; }
+.pr-form.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .pr-form, .pr-form.three { grid-template-columns: 1fr; } }
+.pr-form .full { grid-column: 1 / -1; }
+.pr-field { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.pr-field > span {
+  font-size: .7rem; font-family: var(--mono); text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text3);
+}
+.pr-field small { font-size: .7rem; color: var(--text3); }
+.pr-field input, .pr-field select, .pr-field textarea {
+  width: 100%;
+  height: 38px;
+  padding: 0 .7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background-color: var(--bg2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: .85rem;
+}
+.pr-field textarea { height: auto; min-height: 64px; padding: .5rem .7rem; resize: vertical; }
+.pr-field input:focus, .pr-field select:focus, .pr-field textarea:focus {
+  outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(20,184,166,.18);
+}
+.pr-check { display: flex; align-items: center; gap: .45rem; font-size: .84rem; color: var(--text2); }
+.pr-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; flex-wrap: wrap; }
+
+/* Line items: earnings / deductions inside a payslip row or a structure. */
+.pr-lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; padding: .4rem 0 .6rem; }
+.pr-lines h5 {
+  margin: 0 0 .3rem; font-size: .68rem; font-family: var(--mono); text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text3); font-weight: 400;
+}
+.pr-line { display: flex; justify-content: space-between; gap: .6rem; font-size: .8rem; color: var(--text2); padding: .12rem 0; }
+.pr-line b { color: var(--text); font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pr-line.total { border-top: 1px solid var(--border); margin-top: .2rem; padding-top: .3rem; color: var(--text); font-weight: 600; }
+
+.pr-money { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pr-money.net { color: var(--teal); font-weight: 700; }
+
+/* Tabs on My Pay. */
+.pr-tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; overflow-x: auto; }
+.pr-tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: .55rem .9rem; color: var(--text3); font-family: inherit; font-size: .85rem;
+  cursor: pointer; white-space: nowrap;
+}
+.pr-tab.active { color: var(--text); border-bottom-color: var(--teal); font-weight: 600; }
+
+/* Salary history timeline. */
+.pr-timeline { border-left: 2px solid var(--border2); margin-left: .4rem; padding-left: 1rem; }
+.pr-rev { position: relative; padding: .2rem 0 .9rem; }
+.pr-rev::before {
+  content: ''; position: absolute; left: calc(-1rem - 6px); top: .45rem;
+  width: 10px; height: 10px; border-radius: 50%; background: var(--bg2); border: 2px solid var(--teal);
+}
+.pr-rev.current::before { background: var(--teal); }
+.pr-rev-head { display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; font-size: .84rem; color: var(--text); }
+
+.pr-missing { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+
+.pr-adj-row { display: grid; grid-template-columns: 120px 1fr 120px 32px; gap: .4rem; align-items: center; margin-bottom: .4rem; }
+@media (max-width: 560px) { .pr-adj-row { grid-template-columns: 1fr 1fr; } }
+.pr-adj-row select, .pr-adj-row input {
+  height: 34px; padding: 0 .55rem; border-radius: 7px; border: 1px solid var(--border2);
+  background-color: var(--bg2); color: var(--text); font-family: inherit; font-size: .82rem; min-width: 0;
+}
+.pr-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: 7px; border: 1px solid var(--border); background: var(--bg3); color: var(--text3); cursor: pointer;
+}
+.pr-icon-btn:hover { color: var(--bad); border-color: rgba(239,68,68,.4); }

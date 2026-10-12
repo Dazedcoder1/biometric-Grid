@@ -186,7 +186,7 @@
 .v-btn:hover:not(:disabled) { background: var(--bg4); color: var(--text); border-color: var(--border2); }
 .v-btn:disabled { opacity: .45; cursor: not-allowed; }
 .v-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-.v-btn.danger:hover:not(:disabled) { color: #f87171; border-color: rgba(239,68,68,.4); }
+.v-btn.danger:hover:not(:disabled) { color: var(--bad); border-color: rgba(239,68,68,.4); }
 
 .v-btn-primary {
   width: 100%;
@@ -255,7 +255,10 @@
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 10px;
+  box-shadow: var(--shadow);   /* matches .card-box; flat tiles looked unfinished on white */
 }
+.v-stat.alert { border-color: rgba(239,68,68,.45); }
+.v-stat.alert .v-stat-value { color: var(--bad); }
 .v-stat-label {
   font-family: var(--mono);
   font-size: .68rem;
@@ -279,6 +282,7 @@
 .v-banner.ok    { background: rgba(34,197,94,.12); color: var(--ok); }
 .v-banner.bad   { background: rgba(239,68,68,.12); color: var(--bad); }
 .v-banner.warn  { background: rgba(245,158,11,.12); color: var(--warn); }
+.v-banner.info  { background: rgba(59,130,246,.10); color: var(--info); }
 .v-banner svg { flex: none; margin-top: 2px; }
 
 /* ── empty state ──────────────────────────────────────────────────────────── */
@@ -471,3 +475,160 @@
 /* Only worth saying when the thing actually overflows. */
 .v-scroll-hint { display: none; }
 @media (max-width: 720px) { .v-scroll-hint { display: inline; } }
+
+/* ── audit log: theme-aware pieces ────────────────────────────────────────── */
+
+/* Category icon colours. The bright values are tuned for the dark theme; on
+   white they measured 2–2.5:1 and the icons all but vanished, so light mode
+   gets the deeper step of each hue. */
+:root {
+  --cat-auth: #a855f7;
+  --cat-people: #22c55e;
+  --cat-attendance: #0ea5e9;
+  --cat-devices: #f59e0b;
+  --cat-tasks: #818cf8;
+  --cat-platform: #f472b6;
+  --cat-payroll: #2dd4bf;
+  --cat-documents: #fb923c;
+}
+:root.light-mode {
+  --cat-auth: #7e22ce;
+  --cat-people: #15803d;
+  --cat-attendance: #0369a1;
+  --cat-devices: #b45309;
+  --cat-tasks: #4338ca;
+  --cat-platform: #be185d;
+  --cat-payroll: #0f766e;
+  --cat-documents: #c2410c;
+}
+
+/* The row above the numbers: scope picker, live marker, last update, refresh.
+   Wraps on a narrow screen instead of pushing the button off the edge. */
+.v-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin-bottom: .75rem;
+  font-size: .75rem;
+  color: var(--text3);
+}
+.v-toolbar-scope { margin-right: auto; color: var(--text2); font-weight: 500; }
+.v-live { display: inline-flex; align-items: center; gap: .35rem; color: var(--ok); font-weight: 500; }
+.v-live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* Controls on this page. index.css has a second, later .form-input written for
+   the sign-in screen — full width, 40px of left padding for an icon that is
+   not here, and a 3%-white fill that is invisible on a light card. It wins on
+   source order, so the filter bar inherited all three: text pushed right,
+   boxes with no visible fill in light mode, and uneven heights. Restated here
+   for this page only. */
+.v-filters .form-input,
+.v-toolbar .form-input {
+  /* width:auto, not 100%: at 100% every control took a whole row of the
+     flex bar and the filters stacked into a column. */
+  width: auto;
+  height: 38px;
+  padding: 0 .75rem;
+  /* background-COLOR only. The shorthand also resets background-repeat and
+     -position, so a select's caret image tiled across the whole box. */
+  background-color: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: .82rem;
+  box-shadow: none;
+}
+.v-filters .v-field > .form-input { width: 100%; }
+.v-filters .form-select,
+.v-toolbar .form-select {
+  padding-right: 2rem;
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+}
+.v-filters .form-input:focus,
+.v-toolbar .form-input:focus {
+  outline: none;
+  border-color: var(--teal);
+  background-color: var(--bg2);
+  box-shadow: 0 0 0 3px rgba(20,184,166,.18);
+}
+.v-filters > .v-btn { height: 38px; }
+
+/* ── audit log: one log per scenario ──────────────────────────────────────── */
+
+.al-tabs {
+  display: flex;
+  gap: .4rem;
+  overflow-x: auto;
+  padding-bottom: .4rem;
+  margin-bottom: .9rem;
+  scrollbar-width: thin;
+}
+.al-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  flex: none;
+  padding: .45rem .75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.al-tab:hover { color: var(--text); border-color: var(--border2); }
+.al-tab.active { background: var(--teal); border-color: var(--teal); color: var(--on-teal); font-weight: 600; }
+.al-tab.security:not(.active) { border-color: rgba(239,68,68,.35); }
+.al-count {
+  min-width: 1.4rem;
+  padding: 0 .4rem;
+  border-radius: 999px;
+  background: var(--bg3);
+  color: var(--text3);
+  font-family: var(--mono);
+  font-size: .68rem;
+  text-align: center;
+}
+.al-tab.active .al-count { background: rgba(255,255,255,.22); color: inherit; }
+.al-count.hot { background: rgba(239,68,68,.15); color: var(--bad); }
+
+.al-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: .8rem;
+}
+.al-head h3 { margin: 0 0 .15rem; font-size: 1.02rem; color: var(--text); }
+.al-head p { margin: 0; font-size: .8rem; color: var(--text2); max-width: 680px; }
+.al-sub { color: var(--text3); }
+
+.al-kind {
+  display: inline-flex;
+  border: 1px solid var(--border2);
+  border-radius: 9px;
+  overflow: hidden;
+  flex: none;
+}
+.al-kind button {
+  border: none;
+  background: var(--bg2);
+  color: var(--text2);
+  padding: .4rem .7rem;
+  font-family: inherit;
+  font-size: .76rem;
+  cursor: pointer;
+}
+.al-kind button + button { border-left: 1px solid var(--border2); }
+.al-kind button.active { background: var(--bg4); color: var(--text); font-weight: 600; }
+
+/* Views and downloads, shown among changes, step back a little. */
+.v-log.read .v-log-line { color: var(--text3); }
+.v-log.read .v-log-line strong { color: var(--text2); font-weight: 500; }

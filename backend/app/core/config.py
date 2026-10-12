@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     KMS_MOCK_KEY: str = ""
     AWS_REGION: str = "ap-south-1"
 
+    # --- Attendance ---
+    # Where "today" starts and ends for the sign-in clock and the scanners.
+    # The server and the database run in UTC; an 08:30 IST sign-in is 03:00
+    # UTC, and a late-evening sign-out would otherwise land on tomorrow.
+    APP_TIMEZONE: str = "Asia/Kolkata"
+
     # --- Platform operator ---
     # When both are set, startup makes sure a Super Admin with this email
     # exists — creating it if missing, never overwriting an existing one. So a

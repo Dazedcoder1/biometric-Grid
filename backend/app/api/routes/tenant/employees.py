@@ -12,7 +12,7 @@ router = APIRouter()
 async def list_all_employees(dept_id: Optional[int] = None, tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     query = """
         SELECT u.id, u.name, u.employee_code, u.email, u.finger_id, u.is_active, u.created_at,
-               d.department_id, d.department_name
+               u.is_hr, d.department_id, d.department_name
         FROM users u LEFT JOIN departments d ON u.dept_id = d.department_id
         WHERE u.tenant_id = :tenant_id AND u.role = 'employee'
     """

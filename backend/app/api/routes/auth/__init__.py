@@ -85,6 +85,9 @@ def _create_auth_response(user: User, db_session: AsyncSession = None) -> dict:
         # only: the server enforces it from the database row on every request
         # (dependencies.get_current_user), not from this claim.
         "must_change_password": bool(getattr(user, "must_change_password", False)),
+        # Which screens to draw. The server never trusts this claim — payroll
+        # routes check permissions resolved from the database on every call.
+        "is_hr": bool(getattr(user, "is_hr", False)),
     }
     access_token = create_access_token(payload)
     refresh_token, jti = create_refresh_token(payload)
@@ -277,12 +280,16 @@ async def refresh_token(
 
         token_record.is_revoked = True
 
+        # HR access can be granted or withdrawn between sign-ins; read it fresh
+        # so a refreshed session shows the right screens.
+        holder = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
         new_payload = {
             "user_id": user_id,
             "role": payload.get("role"),
             "tenant_id": payload.get("tenant_id"),
             "dept_id": payload.get("dept_id"),
             "must_change_password": bool(payload.get("must_change_password", False)),
+            "is_hr": bool(getattr(holder, "is_hr", False)),
         }
 
         new_access = create_access_token(new_payload)
