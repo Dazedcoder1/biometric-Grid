@@ -18,12 +18,34 @@ echo "======================================"
 # the -pooler endpoint correctly. So retry that instead. Neon suspends idle
 # compute and takes a second or two to wake, hence more than one attempt.
 
+# Which database this container will use, password hidden. When the .env on
+# the server points somewhere unexpected — an old Neon endpoint, a branch
+# that was deleted — this line says so before anything else happens.
+echo "Database: $(python -c 'from app.core.config import settings; from app.db.url import describe; print(describe(settings.DATABASE_URL))' 2>/dev/null || echo '(DATABASE_URL could not be read)')"
+
 echo "Running database migrations..."
 
 attempt=1
 max_attempts=10
 
-until alembic upgrade head; do
+until alembic upgrade head > /tmp/alembic.log 2>&1; do
+    cat /tmp/alembic.log
+    # A wrong password does not get better by waiting. Say what to fix and
+    # stop, instead of ten identical tracebacks.
+    if grep -q "password authentication failed" /tmp/alembic.log; then
+        echo ""
+        echo "================================================================="
+        echo " The database rejected the password in DATABASE_URL."
+        echo ""
+        echo " Fix: put the current connection string from the Neon console"
+        echo " (Connect -> pooled) into DATABASE_URL in the .env next to"
+        echo " docker-compose.yml, then run:"
+        echo "     docker compose up -d --force-recreate backend"
+        echo " (restart is not enough - it keeps the old value.)"
+        echo " Also check no DATABASE_URL is exported in your shell: env | grep DATABASE_URL"
+        echo "================================================================="
+        exit 1
+    fi
     if [ "$attempt" -ge "$max_attempts" ]; then
         echo "Migrations failed after ${max_attempts} attempts. Giving up."
         echo "The error above is the real one — it is not a timeout."
@@ -34,6 +56,7 @@ until alembic upgrade head; do
     sleep 5
 done
 
+cat /tmp/alembic.log
 echo "Migrations applied."
 echo "Starting API..."
 

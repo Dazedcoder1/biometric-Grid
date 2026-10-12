@@ -42,7 +42,7 @@ import random
 import sys
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 
 from app.core.permissions import PermissionSet
 from app.core.security import hash_password
@@ -566,79 +566,20 @@ async def reset(db) -> None:
     """
     Remove the demo organisations and everything hanging off them.
 
-    Ordered child-first. Several foreign keys are RESTRICT rather than CASCADE
-    — deliberately, so that a user or rack holding credentials cannot be
-    deleted out from under them — which means the order here is load-bearing
-    and not a stylistic choice.
+    The deleting itself is app/services/tenant_purge.py — shared with the
+    Super Admin's "delete organisation and everything in it", so both run the
+    same, already-proven order.
     """
+    from app.services.tenant_purge import purge_tenants
+
     names = [o["name"] for o in ORGS]
     tenants = (await db.execute(select(Tenant).where(Tenant.name.in_(names)))).scalars().all()
     if not tenants:
         log("reset", "no demo organisations found")
         return
-    ids = [t.id for t in tenants]
-
-    vault_ids = [v.id for v in (await db.execute(
-        select(Vault).where(Vault.tenant_id.in_(ids)))).scalars().all()]
-    cred_ids = [c.id for c in (await db.execute(
-        select(Credential).where(Credential.tenant_id.in_(ids)))).scalars().all()]
-    team_ids = [t.id for t in (await db.execute(
-        select(Team).where(Team.tenant_id.in_(ids)))).scalars().all()]
-
-    from app.models.credentials import (
-        CredentialVersion, EncryptedPayload, OwnershipHistory, Share,
-    )
-
-    if cred_ids:
-        version_ids = [v.id for v in (await db.execute(
-            select(CredentialVersion)
-            .where(CredentialVersion.credential_id.in_(cred_ids)))).scalars().all()]
-        payload_ids = [v.payload_id for v in (await db.execute(
-            select(CredentialVersion)
-            .where(CredentialVersion.credential_id.in_(cred_ids)))).scalars().all()]
-
-        await db.execute(delete(CredentialDependency)
-                         .where(CredentialDependency.credential_id.in_(cred_ids)))
-        await db.execute(delete(RotationPolicy).where(RotationPolicy.tenant_id.in_(ids)))
-        await db.execute(delete(Share).where(Share.tenant_id.in_(ids)))
-        await db.execute(delete(OwnershipHistory)
-                         .where(OwnershipHistory.credential_id.in_(cred_ids)))
-        # Credentials point at their current version, and versions point back
-        # at the credential. Break the forward pointer first or the delete is
-        # refused.
-        await db.execute(
-            Credential.__table__.update()
-            .where(Credential.id.in_(cred_ids)).values(current_version_id=None)
-        )
-        if version_ids:
-            await db.execute(delete(CredentialVersion)
-                             .where(CredentialVersion.id.in_(version_ids)))
-        if payload_ids:
-            await db.execute(delete(EncryptedPayload)
-                             .where(EncryptedPayload.id.in_([p for p in payload_ids if p])))
-        await db.execute(delete(Credential).where(Credential.id.in_(cred_ids)))
-
-    if team_ids:
-        await db.execute(delete(TeamMember).where(TeamMember.team_id.in_(team_ids)))
-    await db.execute(delete(Team).where(Team.tenant_id.in_(ids)))
-    await db.execute(delete(System).where(System.tenant_id.in_(ids)))
-    if vault_ids:
-        await db.execute(delete(Rack).where(Rack.vault_id.in_(vault_ids)))
-    await db.execute(delete(Vault).where(Vault.tenant_id.in_(ids)))
-
-    await db.execute(delete(Notification).where(Notification.tenant_id.in_(ids)))
-    await db.execute(delete(AttendanceLog).where(AttendanceLog.tenant_id.in_(ids)))
-    await db.execute(delete(Leave).where(Leave.tenant_id.in_(ids)))
-    await db.execute(delete(Holiday).where(Holiday.tenant_id.in_(ids)))
-    await db.execute(delete(Command).where(Command.tenant_id.in_(ids)))
-    await db.execute(delete(Device).where(Device.tenant_id.in_(ids)))
-    await db.execute(delete(Task).where(Task.tenant_id.in_(ids)))
-    await db.execute(delete(Settings).where(Settings.tenant_id.in_(ids)))
-    await db.execute(delete(User).where(User.tenant_id.in_(ids)))
-    await db.execute(delete(Department).where(Department.tenant_id.in_(ids)))
-    await db.execute(delete(Tenant).where(Tenant.id.in_(ids)))
+    removed = await purge_tenants(db, [t.id for t in tenants])
     await db.commit()
-    log("reset", f"removed {len(tenants)} demo organisation(s)")
+    log("reset", f"removed {removed} demo organisation(s)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

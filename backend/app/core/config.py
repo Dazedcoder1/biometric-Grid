@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     KMS_MOCK_KEY: str = ""
     AWS_REGION: str = "ap-south-1"
 
+    # --- Platform operator ---
+    # When both are set, startup makes sure a Super Admin with this email
+    # exists — creating it if missing, never overwriting an existing one. So a
+    # fresh deployment can be signed into without running anything on the
+    # server. See app/core/bootstrap.py. Leave blank to manage Super Admins by
+    # hand with create_super_admin.py.
+    SUPER_ADMIN_EMAIL: str = ""
+    SUPER_ADMIN_PASSWORD: str = ""
+    SUPER_ADMIN_NAME: str = "Platform Super Admin"
+
     model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
 settings = Settings()

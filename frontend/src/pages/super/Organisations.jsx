@@ -753,17 +753,89 @@ function ManageOrganisationModal({ orgId, onClose, onChanged, onDeleted }) {
             </div>
           )
         ) : (
-          <div style={{ fontSize: '.82rem', color: 'var(--text3)', lineHeight: 1.55 }}>
-            Only an empty organisation can be deleted. This one still holds:
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem', marginTop: '.5rem' }}>
-              {detail.delete_blockers.map((b) => (
-                <span key={b.table} className="v-chip">{b.count} {b.label}</span>
-              ))}
-            </div>
-          </div>
+          <PurgeOrganisation detail={detail} onDeleted={onDeleted} />
         )}
       </div>
     </VaultModal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete an organisation that still has data in it
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The ordinary Delete only takes an empty organisation, on purpose. This is the
+// deliberate version — example data, a test company, a customer that left —
+// and it asks for the organisation's name typed back before it will run.
+function PurgeOrganisation({ detail, onDeleted }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const matches = typed.trim() === detail.name;
+
+  const purge = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await superAdminApi.purgeTenant(detail.id, typed.trim());
+      if (String(getActingTenantId()) === String(detail.id)) clearActingTenant();
+      onDeleted(detail.name);
+    } catch (err) {
+      setError(err.message || 'Could not delete this organisation.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ fontSize: '.82rem', color: 'var(--text3)', lineHeight: 1.55 }}>
+      This organisation still holds:
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.35rem', margin: '.5rem 0 .8rem' }}>
+        {detail.delete_blockers.map((b) => (
+          <span key={b.table} className="v-chip">{b.count} {b.label}</span>
+        ))}
+      </div>
+      {!open ? (
+        <button type="button" className="v-btn danger" onClick={() => setOpen(true)}>
+          <Trash2 size={13} /> Delete organisation and everything in it
+        </button>
+      ) : (
+        <>
+          <div className="v-banner bad" style={{ marginBottom: '.6rem' }}>
+            <AlertTriangle size={14} />
+            <span>
+              Permanently deletes <strong>{detail.name}</strong> — every person, attendance
+              record, leave request, device, task, vault and saved password in it. It
+              cannot be undone. The audit log keeps a record that it happened.
+            </span>
+          </div>
+          <label className="form-label" htmlFor="purge-confirm">
+            Type <strong style={{ color: 'var(--text)' }}>{detail.name}</strong> to confirm
+          </label>
+          <input
+            id="purge-confirm"
+            className="form-input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            style={{ width: '100%', marginBottom: '.6rem' }}
+          />
+          {error && (
+            <div role="alert" style={{ color: 'var(--bad)', marginBottom: '.5rem' }}>{error}</div>
+          )}
+          <div style={{ display: 'flex', gap: '.4rem' }}>
+            <button type="button" className="v-btn" onClick={() => { setOpen(false); setTyped(''); }}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-red" onClick={purge} disabled={!matches || busy}>
+              <Trash2 size={13} style={{ marginRight: 6 }} />
+              {busy ? 'Deleting…' : 'Delete everything'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
