@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import { TrendChart } from '../../components/Charts';
 import OfficeHoursFacts from '../../components/OfficeHoursFacts';
+import WebClock from '../../components/WebClock';
+import PendingDocsBanner from '../../components/PendingDocsBanner';
 import { Check, Info, X } from 'lucide-react';
 import { commonApi, employeeApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -216,6 +218,10 @@ const Dashboard = () => {
       color="#f59e0b" 
       bgColor="rgba(245,158,11,0.15)"
     >
+      {/* Sign In / Sign Out — the first thing on the page, as in an HR web clock. */}
+      <PendingDocsBanner />
+      <WebClock historyPath="/emp/clock" />
+
       {/* Settings Banner */}
       {settings && (
         <div style={{ 

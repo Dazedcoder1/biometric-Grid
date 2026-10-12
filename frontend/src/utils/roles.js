@@ -74,7 +74,29 @@ export const PLATFORM_HOME = '/platform/organisations';
  * less useful than the platform screen, which is where they start.
  */
 export function homePathForUser(user) {
-  return isSuperAdmin(user) ? PLATFORM_HOME : homePathFor(user?.role);
+  if (isSuperAdmin(user)) return PLATFORM_HOME;
+  // Signed in through the HR portal: payroll is home, not their own dashboard.
+  if (user?.isHr && getPortal() === 'hr') return HR_HOME;
+  return homePathFor(user?.role);
+}
+
+/** Where the HR portal lands. */
+export const HR_HOME = '/payroll';
+
+// Which sign-in page this session came through: 'hr' or the main one. Kept in
+// localStorage so a reload returns an HR person to payroll rather than their
+// own employee dashboard. Purely a navigation preference.
+const PORTAL_KEY = 'portal';
+
+export function getPortal() {
+  try { return localStorage.getItem(PORTAL_KEY) || 'main'; } catch { return 'main'; }
+}
+
+export function setPortal(portal) {
+  try {
+    if (portal === 'hr') localStorage.setItem(PORTAL_KEY, 'hr');
+    else localStorage.removeItem(PORTAL_KEY);
+  } catch { /* storage unavailable: falls back to the main portal */ }
 }
 
 /**
@@ -120,5 +142,8 @@ export function userFromToken(token) {
     // /change-password until they pick their own. The server enforces the
     // same thing from the database, so this only decides what to draw.
     mustChangePassword: payload.must_change_password === true,
+    // HR access on top of their own role (users.is_hr). Decides whether the
+    // HR menu and the HR portal are offered; the server checks permissions.
+    isHr: payload.is_hr === true,
   };
 }

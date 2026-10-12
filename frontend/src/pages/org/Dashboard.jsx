@@ -1,6 +1,8 @@
 // src/pages/org/Dashboard.jsx
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '../../layouts/DashboardLayout';
+import WebClock from '../../components/WebClock';
+import PendingDocsBanner from '../../components/PendingDocsBanner';
 import { TrendChart } from '../../components/Charts';
 import { orgApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -143,6 +145,10 @@ const OrgDash = () => {
         .activity-item::before { content: ''; position: absolute; left: -20px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 2px rgba(0,212,170,0.2); }
         .refresh-indicator { font-size: 0.7rem; color: var(--text3); font-family: var(--mono); }
       `}</style>
+
+      {/* An Org Admin keeps attendance too. */}
+      <PendingDocsBanner />
+      <WebClock historyPath="/org/my-clock" />
 
       {error && (
         <div className="error-banner" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', padding: '14px 18px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '12px', color: '#f87171' }}>

@@ -81,6 +81,29 @@ CATALOGUE: tuple[PermissionDef, ...] = (
     PermissionDef("share.revoke", "Withdraw a share"),
 
     # ─── Audit ───────────────────────────────────────────────────────────────
+    PermissionDef("payroll.view", "Read payroll runs, registers and payslips"),
+    PermissionDef(
+        "payroll.manage",
+        "Configure pay components and salary structures; prepare a payroll month",
+    ),
+    PermissionDef(
+        "payroll.approve",
+        "Approve and close a payroll month someone else submitted",
+    ),
+    PermissionDef(
+        "reimbursement.approve",
+        "Approve or reject expense claims of people you administer",
+    ),
+
+    PermissionDef(
+        "documents.view",
+        "Read everyone's letters and HR documents, acknowledgements and access logs",
+    ),
+    PermissionDef(
+        "documents.manage",
+        "Manage letter templates and letterhead, issue letters, publish policies and file documents",
+    ),
+
     PermissionDef("audit.view", "Read the audit log"),
     PermissionDef("audit.verify", "Run the hash-chain verification pass"),
 )
@@ -121,6 +144,9 @@ SYSTEM_ROLES: dict[str, dict] = {
             "audit.view",
             "user.password_reset",
             "system.manage",
+            "payroll.view", "payroll.manage", "payroll.approve",
+            "reimbursement.approve",
+            "documents.view", "documents.manage",
             # credential.reveal was withheld here while the only way to be a
             # Tenant Admin was a long-lived API key: a key carries a tenant and
             # not a person, so the audit log could not name who held it, and a
@@ -158,6 +184,22 @@ SYSTEM_ROLES: dict[str, dict] = {
             # they could already take the actions the log records, but not read
             # the record of them.
             "audit.view",
+            # Expense claims of their own department's people (route-enforced).
+            "reimbursement.approve",
+        ),
+    },
+    # Not a role anyone signs in as on its own: it is added to an employee's or
+    # Org Admin's own role when users.is_hr is set. Payroll and expense claims
+    # for the whole organisation, and HR letters and documents —
+    # nothing in the vault.
+    "hr": {
+        "name": "HR",
+        "description": "Runs payroll and decides expense claims for the organisation.",
+        "grants_all": False,
+        "permissions": (
+            "payroll.view", "payroll.manage", "payroll.approve",
+            "reimbursement.approve",
+            "documents.view", "documents.manage",
         ),
     },
     "employee": {

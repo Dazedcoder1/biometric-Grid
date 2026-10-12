@@ -42,5 +42,12 @@ cryptography>=41.0.0
 # would be custom cryptography, which the project rules forbid.
 pyotp==2.9.0
 
+# IANA time zones for zoneinfo. python:3.12-slim ships without the system
+# tz database, so ZoneInfo("Asia/Kolkata") would fail inside the container.
+tzdata>=2024.1
+
+# PDF payslips. BSD-licensed, pure Python with optional C speedups.
+reportlab>=4.2
+
 # Development and test dependencies live in requirements-dev.txt so the
 # production image does not ship a test runner.

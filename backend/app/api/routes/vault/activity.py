@@ -100,6 +100,45 @@ LABELS = {
     "department.deleted": "deleted a department",
 
     # leave, holidays and office hours
+    "attendance.web_sign_in": "signed in (web clock)",
+    "attendance.web_sign_out": "signed out (web clock)",
+    "user.hr_granted": "gave HR access",
+    "user.hr_revoked": "removed HR access",
+    "document.letterhead_updated": "updated the letterhead",
+    "document.templates_added": "added letter templates",
+    "document.template_updated": "edited a letter template",
+    "letter.drafted": "drafted a letter",
+    "letter.viewed": "opened a letter",
+    "letter.edited": "edited a draft letter",
+    "letter.discarded": "discarded a draft letter",
+    "letter.issued": "issued a letter",
+    "letter.revoked": "revoked a letter",
+    "letter.downloaded": "downloaded a letter",
+    "letter.acknowledged": "acknowledged a letter",
+    "policy.published": "published a policy",
+    "policy.updated": "changed a policy's details",
+    "policy.downloaded": "downloaded a policy",
+    "policy.reminded": "sent policy reminders",
+    "policy.acknowledged": "acknowledged a policy",
+    "document.filed": "filed an employee document",
+    "document.renewed": "uploaded a renewed document",
+    "document.updated": "changed a document's details",
+    "document.downloaded": "downloaded an employee document",
+    "payroll.component_created": "added a pay component",
+    "payroll.component_updated": "changed a pay component",
+    "payroll.profile_updated": "updated pay details",
+    "payroll.salary_revised": "revised a salary",
+    "payroll.run_prepared": "prepared payroll",
+    "payroll.entry_adjusted": "adjusted a payslip",
+    "payroll.run_submitted": "submitted payroll for approval",
+    "payroll.run_approved": "approved and closed payroll",
+    "payroll.run_returned": "sent payroll back to draft",
+    "payroll.register_exported": "exported the payroll register",
+    "payroll.payslip_downloaded": "downloaded a payslip",
+    "reimbursement.submitted": "claimed an expense",
+    "reimbursement.withdrawn": "withdrew an expense claim",
+    "reimbursement.approved": "approved an expense claim",
+    "reimbursement.rejected": "rejected an expense claim",
     "leave.requested": "requested leave",
     "leave.cancelled": "cancelled a leave request",
     "leave.approved": "approved leave",
@@ -190,6 +229,12 @@ CATEGORIES = {
     "user": "people",
     "org_admin": "people",
     "department": "people",
+    "attendance": "attendance",
+    "payroll": "payroll",
+    "letter": "documents",
+    "policy": "documents",
+    "document": "documents",
+    "reimbursement": "payroll",
     "leave": "attendance",
     "holiday": "attendance",
     "settings": "attendance",
@@ -218,6 +263,85 @@ def _category(action: str) -> str:
     return CATEGORIES.get(action.split(".", 1)[0], "other")
 
 
+# ─── separate logs ───────────────────────────────────────────────────────────
+#
+# One stream of everything was unreadable: a payroll approval sat between
+# forty letter downloads and a dozen sign-ins. The page now shows one log at
+# a time. Each log is a set of categories, except "security", which cuts
+# across them: anything refused, anything that errored, and tampering.
+LOGS: dict[str, dict] = {
+    "signins":      {"label": "Sign-ins",            "categories": ("auth",)},
+    "people":       {"label": "People",              "categories": ("people",)},
+    "attendance":   {"label": "Attendance & leave",  "categories": ("attendance",)},
+    "payroll":      {"label": "Payroll",             "categories": ("payroll",)},
+    "documents":    {"label": "HR documents",        "categories": ("documents",)},
+    "vault":        {"label": "Vault & access",      "categories": ("credential", "access", "structure")},
+    "devices":      {"label": "Devices",             "categories": ("devices",)},
+    "tasks":        {"label": "Tasks",               "categories": ("tasks",)},
+    "organisation": {"label": "Organisation",        "categories": ("platform", "audit", "other")},
+    "security":     {"label": "Security alerts",     "categories": ()},
+}
+
+# Reading something, as opposed to changing it. Views and downloads are most
+# of the volume and rarely what someone opens the log to find, so they can be
+# shown on their own or left out.
+_READ_PATTERNS = ("%.viewed", "%downloaded", "%exported", "%revealed%")
+
+
+def _namespaces(categories) -> list[str]:
+    return [ns for ns, cat in CATEGORIES.items() if cat in categories]
+
+
+def category_condition(category: str):
+    ns = _namespaces((category,))
+    return or_(*[AuditLog.action.like(f"{n}.%") for n in ns]) if ns else AuditLog.id.is_(None)
+
+
+def security_condition():
+    return or_(AuditLog.result != "success", AuditLog.action == "credential.tamper_detected",
+               AuditLog.action == "authz.denied", AuditLog.action == "auth.sign_in_failed")
+
+
+def log_condition(log: str):
+    """Which entries belong to one log. Unknown names match nothing."""
+    spec = LOGS.get(log)
+    if spec is None:
+        return AuditLog.id.is_(None)
+    if log == "security":
+        return security_condition()
+    known = _namespaces(spec["categories"])
+    conds = [AuditLog.action.like(f"{n}.%") for n in known]
+    if "other" in spec["categories"]:
+        # Anything whose namespace no category claims ends up here, so no
+        # entry is ever unreachable from the tabs.
+        claimed = list(CATEGORIES)
+        conds.append(~or_(*[AuditLog.action.like(f"{n}.%") for n in claimed]))
+    return or_(*conds)
+
+
+def is_read(action: str) -> bool:
+    """The same rule as _READ_PATTERNS, for one action in Python."""
+    return (action.endswith(".viewed") or action.endswith("downloaded")
+            or action.endswith("exported") or "revealed" in action)
+
+
+def kind_condition(kind: str | None):
+    reads = or_(*[AuditLog.action.like(p) for p in _READ_PATTERNS])
+    if kind == "reads":
+        return reads
+    if kind == "changes":
+        return ~reads
+    return None
+
+
+def log_of(action: str, result: str = "success") -> str:
+    cat = _category(action)
+    for name, spec in LOGS.items():
+        if cat in spec["categories"]:
+            return name
+    return "organisation"
+
+
 def _row(e: AuditLog, names: dict[int, str] | None = None,
          orgs: dict[int, str] | None = None) -> dict:
     return {
@@ -233,6 +357,8 @@ def _row(e: AuditLog, names: dict[int, str] | None = None,
         "action": e.action,
         "label": _label(e.action),
         "category": _category(e.action),
+        "log": log_of(e.action),
+        "is_read": is_read(e.action),
         "result": e.result,
         "reason": e.reason,
         "target_type": e.target_type,
@@ -386,6 +512,8 @@ async def audit_log(
     target_id: str | None = None,
     result: str | None = None,
     category: str | None = None,
+    log: str | None = None,
+    kind: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     all_orgs: bool = False,
@@ -396,6 +524,9 @@ async def audit_log(
 ):
     """
     The audit log, filtered.
+
+    `log` picks one of the separate logs (LOGS); `kind` is "changes" or
+    "reads" (views and downloads).
 
     Scoped by scope_conditions: organisation for a Tenant Admin, department
     for everyone else, everything for a Super Admin.
@@ -417,11 +548,11 @@ async def audit_log(
     if category:
         # A category is a set of namespaces ("people" = user, org_admin,
         # department). An unknown one matches nothing rather than everything.
-        namespaces = [ns for ns, cat in CATEGORIES.items() if cat == category]
-        conditions.append(
-            or_(*[AuditLog.action.like(f"{ns}.%") for ns in namespaces])
-            if namespaces else AuditLog.id.is_(None)
-        )
+        conditions.append(category_condition(category))
+    if log:
+        conditions.append(log_condition(log))
+    if kind_condition(kind) is not None:
+        conditions.append(kind_condition(kind))
     if since:
         conditions.append(AuditLog.occurred_at >= since)
     if until:
@@ -451,6 +582,7 @@ async def audit_log(
 @router.get("/audit/actions")
 async def known_actions(
     all_orgs: bool = False,
+    log: str | None = None,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -458,10 +590,12 @@ async def known_actions(
     q = select(AuditLog.action, func.count(AuditLog.id)).group_by(AuditLog.action)
     for c in scope_conditions(ctx, all_orgs):
         q = q.where(c)
+    if log:
+        q = q.where(log_condition(log))
 
     rows = (await db.execute(q.order_by(AuditLog.action))).all()
     return [
-        {"action": a, "count": n, "label": _label(a), "category": _category(a)}
+        {"action": a, "count": n, "label": _label(a), "category": _category(a), "log": log_of(a)}
         for a, n in rows
     ]
 
@@ -472,6 +606,8 @@ async def export_csv(
     until: datetime | None = None,
     action: str | None = None,
     actor_id: int | None = None,
+    log: str | None = None,
+    kind: str | None = None,
     all_orgs: bool = False,
     ctx: SecurityContext = Depends(require_permission("audit.view")),
     db: AsyncSession = Depends(get_db),
@@ -497,6 +633,10 @@ async def export_csv(
         q = q.where(AuditLog.action == action)
     if actor_id is not None:
         q = q.where(AuditLog.actor_id == actor_id)
+    if log:
+        q = q.where(log_condition(log))
+    if kind_condition(kind) is not None:
+        q = q.where(kind_condition(kind))
 
     rows = (
         await db.execute(q.order_by(AuditLog.seq.asc()).limit(50_000))
@@ -598,8 +738,19 @@ async def summary(
     ).all()
 
     counts = dict(by_result)
+
+    # How much is in each log over the period, for the tab badges. One query
+    # per log keeps every count defined by exactly the condition the tab uses.
+    by_log = {}
+    for name in LOGS:
+        q = select(func.count(AuditLog.id)).where(AuditLog.occurred_at >= since, log_condition(name))
+        for c in scope_conditions(ctx, all_orgs):
+            q = q.where(c)
+        by_log[name] = (await db.execute(q)).scalar_one()
+
     return {
         "days": days,
+        "logs": [{"log": k, "label": v["label"], "count": by_log[k]} for k, v in LOGS.items()],
         "by_action": [
             {"action": a, "label": _label(a), "count": n} for a, n in by_action
         ],

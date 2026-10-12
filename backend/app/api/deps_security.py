@@ -132,6 +132,15 @@ async def load_permissions(db: AsyncSession, user: User) -> PermissionSet:
         ).scalars().first()
         rows = [legacy] if legacy else []
 
+    # HR is an addition to whatever else the person is, never a replacement:
+    # an employee made HR keeps every employee screen.
+    if getattr(user, "is_hr", False) and not any(r.code == "hr" for r in rows):
+        hr = (
+            await db.execute(select(Role).where(Role.code == "hr", Role.tenant_id.is_(None)))
+        ).scalars().first()
+        if hr:
+            rows = [*rows, hr]
+
     if not rows:
         return DENY_ALL
 

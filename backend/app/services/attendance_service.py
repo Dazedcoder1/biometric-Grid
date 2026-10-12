@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 from sqlalchemy import desc
 from app.models.domain import AttendanceLog, User
-import datetime
+from app.services import clock_service
 
 async def process_attendance(tenant_id: int, device_id: str, finger_id: int, db: AsyncSession):
     """Logs attendance directly to DB with automatic IN/OUT toggling and fetches User name."""
@@ -16,14 +16,18 @@ async def process_attendance(tenant_id: int, device_id: str, finger_id: int, db:
     user_name = user.name if user else "Unknown User"
     user_id = user.id if user else None
     
-    # 2. Reset cycle every night at midnight (local/server time)
-    now = datetime.datetime.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # 3. Fetch the user's most recent log for today
+    # 2. Reset cycle at local midnight (APP_TIMEZONE), not the server's UTC
+    #    midnight — which in India is 05:30 in the morning.
+    now = clock_service.now_utc()
+    today_start, _ = clock_service.day_bounds(clock_service.local_today(now))
+
+    # 3. Fetch the person's most recent punch today — by user when we know
+    #    who it is, so a web Sign In (which has no finger) counts: signing in
+    #    on the web and punching out at the scanner records an OUT.
+    who = (AttendanceLog.user_id == user_id) if user_id is not None else (AttendanceLog.finger_id == finger_id)
     stmt = select(AttendanceLog).where(
         AttendanceLog.tenant_id == tenant_id,
-        AttendanceLog.finger_id == finger_id,
+        who,
         AttendanceLog.timestamp >= today_start
     ).order_by(desc(AttendanceLog.timestamp)).limit(1)
     
@@ -41,8 +45,9 @@ async def process_attendance(tenant_id: int, device_id: str, finger_id: int, db:
         device_id=device_id,
         user_id=user_id, # <--- FIXED
         finger_id=finger_id,
-        timestamp=datetime.datetime.now(),
-        record_type=current_type
+        timestamp=now,
+        record_type=current_type,
+        source="device",
     )
     db.add(log)
     await db.commit()

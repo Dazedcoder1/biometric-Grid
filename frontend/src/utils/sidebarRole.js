@@ -41,5 +41,7 @@ const COLOURS = {
  */
 export function sidebarPropsFor(user) {
   const key = TO_SIDEBAR[user?.role] || 'user';
-  return { role: key, label: LABELS[key], ...COLOURS[key] };
+  // An employee or Org Admin with HR access says so under their name.
+  const label = user?.isHr && key !== 'superadmin' ? `${LABELS[key]} · HR` : LABELS[key];
+  return { role: key, label, ...COLOURS[key] };
 }

@@ -55,6 +55,19 @@ import VaultAuditLog from './pages/vault/AuditLog';
 import VaultDependencyMap from './pages/vault/DependencyMap';
 import VaultPeople from './pages/vault/People';
 import ChangePasswordRequired from './pages/ChangePasswordRequired';
+import MyClockLog from './pages/clock/MyClockLog';
+import TeamClock from './pages/clock/TeamClock';
+import PayrollRuns from './pages/payroll/PayrollRuns';
+import PayrollRun from './pages/payroll/PayrollRun';
+import PayrollPeople from './pages/payroll/PayrollPeople';
+import PayComponents from './pages/payroll/PayComponents';
+import Reimbursements from './pages/payroll/Reimbursements';
+import MyPay from './pages/payroll/MyPay';
+import Letters from './pages/documents/Letters';
+import LetterTemplates from './pages/documents/LetterTemplates';
+import Policies from './pages/documents/Policies';
+import EmployeeFiles from './pages/documents/EmployeeFiles';
+import MyDocuments from './pages/documents/MyDocuments';
 
 function App() {
   return (
@@ -69,6 +82,8 @@ function App() {
                 bookmarks and in the output of create_organisation.py. */}
             <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
+            {/* The HR portal: same accounts, lands on payroll, HR access required. */}
+            <Route path="/hr/login" element={<Login portal="hr" />} />
             <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
             {/* ==================== PLATFORM (SUPER ADMIN) ==================== */}
@@ -191,6 +206,135 @@ function App() {
                   <ChangeApiKey />
                 </ProtectedRoute>
               } 
+            />
+
+            {/* ==================== PAYROLL ==================== */}
+            <Route
+              path="/payroll"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <PayrollRuns />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll/runs/:id"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <PayrollRun />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll/people"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <PayrollPeople />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/payroll/components"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <PayComponents />
+                </ProtectedRoute>
+              }
+            />
+            {/* Org Admins decide their own department's claims. */}
+            <Route
+              path="/payroll/claims"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin', 'org_admin', 'department_admin']} allowHr>
+                  <Reimbursements />
+                </ProtectedRoute>
+              }
+            />
+            {/* Anyone's own payslips, salary history and claims. */}
+            <Route
+              path="/my-pay"
+              element={
+                <ProtectedRoute allowedRoles={['employee', 'user', 'org_admin', 'department_admin', 'tenant_admin']}>
+                  <MyPay />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ==================== HR DOCUMENTS & LETTERS ==================== */}
+            <Route
+              path="/documents/letters"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <Letters />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/documents/templates"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <LetterTemplates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/documents/policies"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <Policies />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/documents/files"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']} allowHr>
+                  <EmployeeFiles />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/my-documents"
+              element={
+                <ProtectedRoute allowedRoles={['employee', 'user', 'org_admin', 'department_admin']}>
+                  <MyDocuments />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ==================== SIGN-IN CLOCK ==================== */}
+            {/* Web Sign In / Sign Out, merged with the fingerprint scanners. */}
+            <Route
+              path="/super/clock-team"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin']}>
+                  <TeamClock scope="tenant" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org/clock-team"
+              element={
+                <ProtectedRoute allowedRoles={['org_admin', 'department_admin']}>
+                  <TeamClock scope="org" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/org/my-clock"
+              element={
+                <ProtectedRoute allowedRoles={['org_admin', 'department_admin']}>
+                  <MyClockLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/emp/clock"
+              element={
+                <ProtectedRoute allowedRoles={['employee', 'user']}>
+                  <MyClockLog />
+                </ProtectedRoute>
+              }
             />
 
             {/* ==================== ORG ADMIN ROUTES ==================== */}

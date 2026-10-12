@@ -15,11 +15,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Building2, Download, FileSearch, RefreshCw, ShieldAlert, ShieldCheck, X,
+  AlertCircle, Building2, CalendarDays, CheckSquare, Cpu, Download, FileSearch, FileText, IndianRupee,
+  KeyRound, Layers, LogIn, RefreshCw, ShieldAlert, ShieldCheck, Siren, UserCog, X,
 } from 'lucide-react';
 
 import {
-  CATEGORY_META, activeFilterChips, actorText, categoryMeta, groupByDay, shortAgo,
+  activeFilterChips, actorText, categoryMeta, groupByDay, shortAgo,
   targetText, timeOfDay,
 } from '../../utils/auditMeta';
 
@@ -35,8 +36,30 @@ const PAGE = 100;
 const REFRESH_MS = 30_000;
 
 const NO_FILTERS = {
-  action: '', category: '', result: '', actor_id: '', since: '', until: '',
+  action: '', result: '', actor_id: '', since: '', until: '',
 };
+
+// The log is split by scenario: one tab per kind of activity, each with its
+// own count, instead of one stream where a payroll approval sits between
+// forty letter downloads. Names match LOGS in routes/vault/activity.py.
+const LOGS = [
+  { key: 'all', label: 'All activity', icon: Layers, about: 'Everything, newest first.' },
+  { key: 'signins', label: 'Sign-ins', icon: LogIn, about: 'Sign-ins, failed attempts, sign-outs, password changes and authenticator use.' },
+  { key: 'people', label: 'People', icon: UserCog, about: 'Accounts created and changed, departments, Org Admins, HR access and password resets.' },
+  { key: 'attendance', label: 'Attendance & leave', icon: CalendarDays, about: 'Web sign-in clock, leave requests and decisions, holidays and office-hours settings.' },
+  { key: 'payroll', label: 'Payroll', icon: IndianRupee, about: 'Pay components, salary revisions, payroll months, payslips and expense claims.' },
+  { key: 'documents', label: 'HR documents', icon: FileText, about: 'Letters, templates, policies and acknowledgements, and employee documents.' },
+  { key: 'vault', label: 'Vault & access', icon: KeyRound, about: 'Credentials revealed, created, rotated and shared; systems and dependencies.' },
+  { key: 'devices', label: 'Devices', icon: Cpu, about: 'Scanners registered, changed and sent commands.' },
+  { key: 'tasks', label: 'Tasks', icon: CheckSquare, about: 'Tasks and GitHub repositories.' },
+  { key: 'organisation', label: 'Organisation', icon: Building2, about: 'Organisation-level changes and audit exports.' },
+  { key: 'security', label: 'Security alerts', icon: Siren, about: 'Anything refused or failed — denied access, failed sign-ins, errors and tampering. A spike here is what probing looks like.' },
+];
+const LOG_KEY = 'audit_log_tab';
+
+function savedLog() {
+  try { return localStorage.getItem(LOG_KEY) || 'all'; } catch { return 'all'; }
+}
 
 const RESULT_TONE = { denied: 'var(--bad)', error: 'var(--warn)', success: 'var(--ok)' };
 
@@ -63,11 +86,26 @@ export default function AuditLog() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [filters, setFilters] = useState(NO_FILTERS);
+  const [log, setLog] = useState(savedLog);
+  // all | changes | reads (views and downloads)
+  const [kind, setKind] = useState('all');
+  const scopeParams = useMemo(() => ({
+    ...(log !== 'all' ? { log } : {}),
+    ...(kind !== 'all' ? { kind } : {}),
+    ...(allOrgs ? { all_orgs: 'true' } : {}),
+  }), [log, kind, allOrgs]);
+
+  const chooseLog = (key) => {
+    setLog(key);
+    // An action from another log would leave the new tab empty.
+    setFilters((f) => ({ ...f, action: '' }));
+    try { localStorage.setItem(LOG_KEY, key); } catch { /* not remembered */ }
+  };
 
   const load = useCallback(async (nextOffset = 0) => {
     try {
       const data = await vaultApi.auditLog({
-        ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}), limit: PAGE, offset: nextOffset,
+        ...filters, ...scopeParams, limit: PAGE, offset: nextOffset,
       });
       setEntries(data.entries);
       setTotal(data.total);
@@ -77,7 +115,7 @@ export default function AuditLog() {
     } catch (err) {
       setError(err.message);
     }
-  }, [filters, allOrgs]);
+  }, [filters, scopeParams]);
 
   // The headline numbers and the action list move as new entries arrive —
   // a new kind of action should appear in the filter without a reload.
@@ -111,7 +149,7 @@ export default function AuditLog() {
 
   useEffect(() => {
     let cancelled = false;
-    vaultApi.auditLog({ ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}), limit: PAGE, offset: 0 }).then(
+    vaultApi.auditLog({ ...filters, ...scopeParams, limit: PAGE, offset: 0 }).then(
       (data) => {
         if (cancelled) return;
         setEntries(data.entries);
@@ -123,7 +161,7 @@ export default function AuditLog() {
       (err) => { if (!cancelled) setError(err.message); },
     );
     return () => { cancelled = true; };
-  }, [filters, allOrgs]);
+  }, [filters, scopeParams]);
 
   // Live: first page only, tab visible only. A hidden tab polling every 30
   // seconds all day is load nobody is looking at.
@@ -153,7 +191,7 @@ export default function AuditLog() {
   };
 
   const exportCsv = async () => {
-    try { await vaultApi.downloadAudit({ ...filters, ...(allOrgs ? { all_orgs: 'true' } : {}) }); }
+    try { await vaultApi.downloadAudit({ ...filters, ...scopeParams }); }
     catch (err) { setError(err.message); }
   };
 
@@ -161,6 +199,13 @@ export default function AuditLog() {
 
   const hasFilters = Object.values(filters).some(Boolean);
   const chips = useMemo(() => activeFilterChips(filters, actions), [filters, actions]);
+  const counts = useMemo(
+    () => Object.fromEntries((summary?.logs || []).map((x) => [x.log, x.count])), [summary],
+  );
+  // Tabs with nothing in them this week stay out of the way, unless open.
+  const tabs = LOGS.filter((t) => t.key === 'all' || t.key === 'security' || t.key === log || (counts[t.key] || 0) > 0);
+  const current = LOGS.find((t) => t.key === log) || LOGS[0];
+  const logActions = log === 'all' || log === 'security' ? actions : actions.filter((a) => a.log === log);
   const groups = useMemo(() => groupByDay(entries), [entries]);
 
   return (
@@ -173,7 +218,7 @@ export default function AuditLog() {
       )}
 
       {!grantsAll && user?.role && user.role !== 'tenant_admin' && (
-        <div className="v-banner" style={{ background: 'rgba(14,165,233,.1)', color: 'var(--info)' }}>
+        <div className="v-banner info">
           <Building2 size={14} />
           <span>
             Showing activity in your department: things done by its people, and
@@ -182,8 +227,7 @@ export default function AuditLog() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-        gap: '.6rem', marginBottom: '.6rem', fontSize: '.75rem', color: 'var(--text3)' }}>
+      <div className="v-toolbar">
         {superAdmin && hasOrg && (
           <select
             className="form-input form-select"
@@ -197,95 +241,52 @@ export default function AuditLog() {
           </select>
         )}
         {superAdmin && !hasOrg && (
-          <span style={{ marginRight: 'auto', color: 'var(--text2)' }}>All organisations</span>
+          <span className="v-toolbar-scope">All organisations</span>
         )}
-        {offset === 0 && <span title="New entries appear every 30 seconds">● Live</span>}
+        {offset === 0 && (
+          <span className="v-live" title="New entries appear every 30 seconds">
+            <span className="v-live-dot" aria-hidden="true" /> Live
+          </span>
+        )}
         {updatedAt && <span>Updated {shortAgo(new Date(updatedAt).toISOString())}</span>}
         <button type="button" className="v-btn" onClick={refresh} disabled={refreshing}>
           <RefreshCw size={13} /> {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
-      {/* ─── headline numbers ──────────────────────────────────────── */}
-      {summary && (
-        <div className="v-stats">
-          <div className="v-stat">
-            <div className="v-stat-label">Successful · {summary.days}d</div>
-            <div className="v-stat-value">{summary.success}</div>
-          </div>
-          <div className="v-stat" style={{
-            borderColor: summary.denied > 0 ? 'rgba(239,68,68,.4)' : undefined }}>
-            <div className="v-stat-label">Denied</div>
-            <div className="v-stat-value"
-              style={{ color: summary.denied > 0 ? '#f87171' : 'inherit' }}>
-              {summary.denied}
-            </div>
-          </div>
-          <div className="v-stat">
-            <div className="v-stat-label">Errors</div>
-            <div className="v-stat-value">{summary.errors}</div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── integrity ─────────────────────────────────────────────── */}
-      <div className="card-box" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <h4 style={{ margin: '0 0 .25rem', fontSize: '.92rem' }}>
-              Chain integrity
-            </h4>
-            {!canVerify ? (
-              // Explained rather than hidden. The chain is the reason this log
-              // is worth anything, and the person running an organisation
-              // should know it exists even though they cannot run the check —
-              // "you have no button" reads as a missing feature, which is the
-              // wrong impression to leave about an integrity guarantee.
-              <div style={{ fontSize: '.8rem', color: 'var(--text2)' }}>
-                Every entry is hashed against the one before it, so an altered
-                or deleted entry breaks the chain.
-                <div style={{ fontSize: '.75rem', color: 'var(--text3)', marginTop: '.4rem' }}>
-                  The check itself is run by the platform operator. It walks the
-                  whole chain across every organisation, so its result would
-                  reveal activity outside yours — which is why it needs the
-                  <code style={{ margin: '0 .25rem' }}>audit.verify</code>
-                  permission.
-                </div>
-              </div>
-            ) : !integrity ? (
-              <div style={{ fontSize: '.8rem', color: 'var(--text2)' }}>
-                Every entry is hashed against the one before it. Run a check to
-                confirm nothing has been altered or removed.
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: '.85rem',
-                  color: integrity.ok ? 'var(--ok)' : 'var(--bad)' }}>
-                  {integrity.ok ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
-                  {' '}
-                  {integrity.ok
-                    ? `Verified ${integrity.checked} entries — chain intact.`
-                    : `BROKEN at entry ${integrity.broken_at}: ${integrity.detail}`}
-                </div>
-                <div style={{ fontSize: '.72rem', opacity: .6, marginTop: '.35rem' }}>
-                  {integrity.caveat}
-                </div>
-                {integrity.anchor && (
-                  <div style={{ fontSize: '.68rem', opacity: .55,
-                    fontFamily: 'var(--mono)', marginTop: '.3rem',
-                    wordBreak: 'break-all' }}>
-                    head: {integrity.anchor}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          {canVerify && (
-            <button type="button" className="v-btn" onClick={verify} disabled={checking}>
-              <RefreshCw size={13} /> {checking ? 'Checking…' : 'Verify chain'}
+      {/* ─── one log per scenario ─────────────────────────────────── */}
+      <div className="al-tabs" role="tablist" aria-label="Which log">
+        {tabs.map((t) => {
+          const Icon = t.icon;
+          const n = t.key === 'all'
+            ? (summary ? summary.success + summary.denied + summary.errors : null)
+            : counts[t.key];
+          return (
+            <button key={t.key} type="button" role="tab" aria-selected={log === t.key}
+              className={`al-tab ${log === t.key ? 'active' : ''} ${t.key === 'security' ? 'security' : ''}`}
+              onClick={() => chooseLog(t.key)}>
+              <Icon size={14} />
+              <span>{t.label}</span>
+              {n != null && <span className={`al-count ${t.key === 'security' && n > 0 ? 'hot' : ''}`}>{n}</span>}
             </button>
-          )}
+          );
+        })}
+      </div>
+
+      <div className="al-head">
+        <div>
+          <h3>{current.label}</h3>
+          <p>
+            {current.about}
+            {summary && current.key !== 'all' && counts[current.key] != null && (
+              <span className="al-sub"> {counts[current.key]} in the last {summary.days} days · {total} matching now.</span>
+            )}
+          </p>
+        </div>
+        <div className="al-kind" role="group" aria-label="Show">
+          {[['all', 'Everything'], ['changes', 'Changes'], ['reads', 'Views & downloads']].map(([k, l]) => (
+            <button key={k} type="button" className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{l}</button>
+          ))}
         </div>
       </div>
 
@@ -296,20 +297,11 @@ export default function AuditLog() {
         <select className="form-input form-select" value={filters.action}
           aria-label="Filter by action"
           onChange={(e) => set('action', e.target.value)} style={{ minWidth: 190 }}>
-          <option value="">All actions</option>
-          {actions.map((a) => (
+          <option value="">All actions{log !== 'all' ? ' in this log' : ''}</option>
+          {logActions.map((a) => (
             <option key={a.action} value={a.action}>
               {a.label} ({a.count})
             </option>
-          ))}
-        </select>
-
-        <select className="form-input form-select" value={filters.category}
-          aria-label="Filter by category"
-          onChange={(e) => set('category', e.target.value)}>
-          <option value="">All categories</option>
-          {Object.entries(CATEGORY_META).filter(([k]) => k !== 'other').map(([k, m]) => (
-            <option key={k} value={k}>{m.label}</option>
           ))}
         </select>
 
@@ -412,6 +404,67 @@ export default function AuditLog() {
           </button>
         </div>
       )}
+      {/* ─── integrity ─────────────────────────────────────────────── */}
+      <div className="card-box" style={{ marginTop: '1.2rem', marginBottom: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <h4 style={{ margin: '0 0 .25rem', fontSize: '.92rem' }}>
+              Chain integrity
+            </h4>
+            {!canVerify ? (
+              // Explained rather than hidden. The chain is the reason this log
+              // is worth anything, and the person running an organisation
+              // should know it exists even though they cannot run the check —
+              // "you have no button" reads as a missing feature, which is the
+              // wrong impression to leave about an integrity guarantee.
+              <div style={{ fontSize: '.8rem', color: 'var(--text2)' }}>
+                Every entry is hashed against the one before it, so an altered
+                or deleted entry breaks the chain.
+                <div style={{ fontSize: '.75rem', color: 'var(--text3)', marginTop: '.4rem' }}>
+                  The check itself is run by the platform operator. It walks the
+                  whole chain across every organisation, so its result would
+                  reveal activity outside yours — which is why it needs the
+                  <code style={{ margin: '0 .25rem' }}>audit.verify</code>
+                  permission.
+                </div>
+              </div>
+            ) : !integrity ? (
+              <div style={{ fontSize: '.8rem', color: 'var(--text2)' }}>
+                Every entry is hashed against the one before it. Run a check to
+                confirm nothing has been altered or removed.
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: '.85rem',
+                  color: integrity.ok ? 'var(--ok)' : 'var(--bad)' }}>
+                  {integrity.ok ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+                  {' '}
+                  {integrity.ok
+                    ? `Verified ${integrity.checked} entries — chain intact.`
+                    : `BROKEN at entry ${integrity.broken_at}: ${integrity.detail}`}
+                </div>
+                <div style={{ fontSize: '.72rem', opacity: .6, marginTop: '.35rem' }}>
+                  {integrity.caveat}
+                </div>
+                {integrity.anchor && (
+                  <div style={{ fontSize: '.68rem', opacity: .55,
+                    fontFamily: 'var(--mono)', marginTop: '.3rem',
+                    wordBreak: 'break-all' }}>
+                    head: {integrity.anchor}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          {canVerify && (
+            <button type="button" className="v-btn" onClick={verify} disabled={checking}>
+              <RefreshCw size={13} /> {checking ? 'Checking…' : 'Verify chain'}
+            </button>
+          )}
+        </div>
+      </div>
+
     </DashboardLayout>
   );
 }
@@ -424,7 +477,7 @@ function LogRow({ entry, today, showOrg }) {
   const tampered = entry.action === 'credential.tamper_detected';
 
   return (
-    <div className={`v-log ${denied ? 'denied' : ''} ${tampered ? 'tampered' : ''}`}>
+    <div className={`v-log ${denied ? 'denied' : ''} ${tampered ? 'tampered' : ''} ${entry.is_read ? 'read' : ''}`}>
       <span className="v-log-icon" style={{ color: tint }} title={categoryLabel}>
         <CategoryIcon size={14} strokeWidth={1.75} />
       </span>

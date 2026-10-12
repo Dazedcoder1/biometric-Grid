@@ -16,6 +16,8 @@
 #   VITE_API_BASE_URL    public URL of the API, e.g. https://api.attendance.gridsphere.in
 #   JWT_SECRET_KEY       python -c "import secrets; print(secrets.token_urlsafe(64))"
 #   GITHUB_ENC_KEY       python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#   KMS_MOCK_KEY         vault key - identical to the one every other user of
+#                        this database has, or saved credentials cannot be read
 #   SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD, SUPER_ADMIN_NAME
 #                        platform Super Admin, created at startup if missing
 #                        (never overwritten — see app/core/bootstrap.py)
@@ -80,6 +82,15 @@ services:
       GITHUB_ENC_KEY: ${GITHUB_ENC_KEY:-}
       GITHUB_SYNC_INTERVAL_MINUTES: 30
       GITHUB_SYNC_PAGE_LIMIT: 3
+
+      # Credential vault key. Every stored password is encrypted under it, so
+      # it must be the SAME value everywhere this database is used (each
+      # developer's .env included). A different or missing key makes every
+      # saved credential unreadable — it is not a per-environment secret.
+      KMS_PROVIDER: ${KMS_PROVIDER:-mock}
+      KMS_KEY_ID: ${KMS_KEY_ID:-local-dev-kek-v1}
+      KMS_MOCK_KEY: ${KMS_MOCK_KEY:-}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
 
       # Only listed variables reach the container — without these lines the
       # Super Admin in .env is never seen. Blank = nothing is created.

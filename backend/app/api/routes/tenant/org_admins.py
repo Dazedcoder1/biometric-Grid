@@ -62,7 +62,7 @@ class OrgAdminUpdate(BaseModel):
 @router.get('/org-admins')
 async def list_org_admins(tenant: Tenant = Depends(verify_tenant_api_key), db: AsyncSession = Depends(get_db)):
     result = await db.execute(text("""
-        SELECT u.id, u.name, u.email, u.dept_id, d.department_name, u.is_active, u.created_at,
+        SELECT u.id, u.name, u.email, u.dept_id, d.department_name, u.is_active, u.created_at, u.is_hr,
                COUNT(e.id) FILTER (WHERE e.role = 'employee') as employee_count
         FROM users u JOIN departments d ON u.dept_id = d.department_id
         LEFT JOIN users e ON e.dept_id = u.dept_id AND e.role = 'employee'

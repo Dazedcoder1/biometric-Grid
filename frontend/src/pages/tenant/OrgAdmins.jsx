@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Search, RefreshCw, AlertCircle, Mail, Building2, Shield, Trash2, CheckCircle, XCircle, Copy } from 'lucide-react';
 import DashboardLayout from '../../layouts/DashboardLayout';
 import Badge from '../../components/Badge';
+import HrToggle, { HrBadge } from '../../components/HrToggle';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import CredentialsModal from '../../components/CredentialsModal';
 import PersistentToast from '../../components/PersistentToast';
@@ -336,7 +337,7 @@ const OrgAdmins = () => {
                         <Shield size={24} style={{ color: admin.is_active ? '#a855f7' : '#ef4444' }} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '1rem' }}>{admin.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: '1rem' }}>{admin.name}{admin.is_hr && <HrBadge />}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Mail size={12} /> {admin.email}
                         </div>
@@ -363,7 +364,11 @@ const OrgAdmins = () => {
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <HrToggle
+                      person={admin}
+                      onChange={(isHr) => setOrgAdmins((list) => list.map((x) => (x.id === admin.id ? { ...x, is_hr: isHr } : x)))}
+                    />
                     <button 
                       className="btn btn-ghost" 
                       onClick={() => handleToggleStatus(admin.id, admin.is_active)}

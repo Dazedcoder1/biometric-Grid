@@ -35,12 +35,17 @@ async def lifespan(app: FastAPI):
     from app.services.share_sweeper import expiry_loop
     share_task = asyncio.create_task(expiry_loop())
 
+    # Reminders before employee documents expire and policies fall due for
+    # review. Late reminders are the worst a dead loop can cause.
+    from app.services.hr_documents import reminder_loop
+    docs_task = asyncio.create_task(reminder_loop())
+
     yield
 
     logger.info("Shutting down...")
-    for task in (github_task, share_task):
+    for task in (github_task, share_task, docs_task):
         task.cancel()
-    for task in (github_task, share_task):
+    for task in (github_task, share_task, docs_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -140,6 +145,25 @@ app.include_router(common_settings_router, prefix="/api", tags=["Shared"])
 # Admin password resets, scoped by oversight_service. Replaces the unscoped
 # /api/auth/set-password. See routes/common/accounts.py.
 app.include_router(common_accounts_router, prefix="/api", tags=["Accounts"])
+
+# ─── Sign-in clock (web Sign In / Sign Out, merged with the scanners) ─────────
+from app.api.routes.clock import router as clock_router
+from app.api.routes.org_admin.clock import router as clock_org_router
+from app.api.routes.tenant.clock import router as clock_tenant_router
+
+app.include_router(clock_router, prefix="/api/clock", tags=["Sign-in clock"])
+app.include_router(clock_org_router, prefix=ORG_PREFIX, tags=["Sign-in clock"])
+app.include_router(clock_tenant_router, prefix=TENANT_PREFIX, tags=["Sign-in clock"])
+
+# ─── Payroll (permission-guarded; Super Admins act via X-Acting-Tenant-Id) ────
+from app.api.routes.payroll import router as payroll_router
+
+app.include_router(payroll_router, prefix="/api/payroll", tags=["Payroll"])
+
+# ─── HR documents & letters ───────────────────────────────────────────────────
+from app.api.routes.documents import router as documents_router
+
+app.include_router(documents_router, prefix="/api/documents", tags=["HR Documents"])
 
 # ─── Employee (uses JWT Bearer) ───────────────────────────────────────────────
 from app.api.routes.employee.dashboard      import router as emp_dash_router

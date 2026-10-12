@@ -1,7 +1,10 @@
 // src/components/Sidebar.jsx
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Building2, ChevronsUpDown, Key, LayoutGrid, Lock, LogOut, Monitor } from 'lucide-react';
+import {
+  Building2, ChevronsUpDown, IndianRupee, Key, LayoutGrid, Lock, LogIn, LogOut, Monitor, Receipt,
+  FileSignature, FolderOpen, Files, ScrollText as PolicyIcon, SlidersHorizontal, Stamp, Timer, Wallet,
+} from 'lucide-react';
 import { 
   BarChart3, 
   Calendar, 
@@ -36,6 +39,7 @@ const TENANT_ITEMS = [
   { icon: <Package size={18} />, label: 'Departments', path: '/super/departments' },
   { icon: <Shield size={18} />, label: 'Org Admins', path: '/super/org-admins' },
   { icon: <Clock size={18} />, label: 'Attendance', path: '/super/attendance' },
+  { icon: <Timer size={18} />, label: 'Sign-ins', path: '/super/clock-team' },
   { icon: <Briefcase size={18} />, label: 'Leaves', path: '/super/leaves' },
   { icon: <Calendar size={18} />, label: 'Holidays', path: '/super/holidays' },
   { icon: <Cpu size={18} />, label: 'Devices', path: '/super/devices' },
@@ -43,12 +47,36 @@ const TENANT_ITEMS = [
   { icon: <CheckSquare size={18} />, label: 'Tasks', path: '/super/tasks' },
   { icon: <Github size={18} />, label: 'GitHub Repos', path: '/super/github-repos' },
   { icon: <Settings size={18} />, label: 'Settings', path: '/super/settings' },
+  { section: 'Payroll' },
+  { icon: <IndianRupee size={18} />, label: 'Payroll Runs', path: '/payroll' },
+  { icon: <Wallet size={18} />, label: 'Salaries', path: '/payroll/people' },
+  { icon: <SlidersHorizontal size={18} />, label: 'Pay Components', path: '/payroll/components' },
+  { icon: <Receipt size={18} />, label: 'Expense Claims', path: '/payroll/claims' },
+  { section: 'Documents' },
+  { icon: <FileSignature size={18} />, label: 'Letters', path: '/documents/letters' },
+  { icon: <Stamp size={18} />, label: 'Letter Templates', path: '/documents/templates' },
+  { icon: <PolicyIcon size={18} />, label: 'Policies & Handbook', path: '/documents/policies' },
+  { icon: <FolderOpen size={18} />, label: 'Employee Documents', path: '/documents/files' },
 ];
 
 const Sidebar = ({ role, label, iconColor }) => {
   const actingTenantName = getActingTenantName();
   const { logout, user } = useAuth();
   const superAdmin = isSuperAdmin(user);
+
+  // Employees and Org Admins with HR access get payroll for the whole
+  // organisation, on top of their own menu.
+  const HR_ITEMS = user?.isHr ? [
+    { section: 'HR' },
+    { icon: <IndianRupee size={18} />, label: 'Payroll Runs', path: '/payroll' },
+    { icon: <Wallet size={18} />, label: 'Salaries', path: '/payroll/people' },
+    { icon: <SlidersHorizontal size={18} />, label: 'Pay Components', path: '/payroll/components' },
+    { icon: <Receipt size={18} />, label: 'Expense Claims', path: '/payroll/claims' },
+    { icon: <FileSignature size={18} />, label: 'Letters', path: '/documents/letters' },
+    { icon: <Stamp size={18} />, label: 'Letter Templates', path: '/documents/templates' },
+    { icon: <PolicyIcon size={18} />, label: 'Policies & Handbook', path: '/documents/policies' },
+    { icon: <FolderOpen size={18} />, label: 'Employee Documents', path: '/documents/files' },
+  ] : [];
 
   const getNavItems = () => {
     // The platform operator: full control. Their own screens come first; the
@@ -90,6 +118,7 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <Package size={18} />, label: 'Departments', path: '/super/departments' },
           { icon: <Shield size={18} />, label: 'Org Admins', path: '/super/org-admins' },
           { icon: <Clock size={18} />, label: 'Attendance', path: '/super/attendance' },
+          { icon: <Timer size={18} />, label: 'Sign-ins', path: '/super/clock-team' },
           { icon: <Briefcase size={18} />, label: 'Leaves', path: '/super/leaves' },
           { icon: <Calendar size={18} />, label: 'Holidays', path: '/super/holidays' },
           { icon: <Cpu size={18} />, label: 'Devices', path: '/super/devices' },
@@ -103,6 +132,16 @@ const Sidebar = ({ role, label, iconColor }) => {
           // this role signs in with a password and enrols an authenticator
           // like anyone else. Reveal is still gated by step-up MFA, which an
           // API-key caller cannot satisfy. Migration a6b7c8d9e0f1.
+          { section: 'Payroll' },
+          { icon: <IndianRupee size={18} />, label: 'Payroll Runs', path: '/payroll' },
+          { icon: <Wallet size={18} />, label: 'Salaries', path: '/payroll/people' },
+          { icon: <SlidersHorizontal size={18} />, label: 'Pay Components', path: '/payroll/components' },
+          { icon: <Receipt size={18} />, label: 'Expense Claims', path: '/payroll/claims' },
+          { section: 'Documents' },
+          { icon: <FileSignature size={18} />, label: 'Letters', path: '/documents/letters' },
+          { icon: <Stamp size={18} />, label: 'Letter Templates', path: '/documents/templates' },
+          { icon: <PolicyIcon size={18} />, label: 'Policies & Handbook', path: '/documents/policies' },
+          { icon: <FolderOpen size={18} />, label: 'Employee Documents', path: '/documents/files' },
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
           // Everyone in the organisation, one vault at a time.
@@ -113,6 +152,8 @@ const Sidebar = ({ role, label, iconColor }) => {
       case 'orgadmin':
         return [
           { icon: <LayoutDashboard size={18} />, label: 'Dashboard', path: '/org/dashboard' },
+          { icon: <Timer size={18} />, label: 'Team Sign-ins', path: '/org/clock-team' },
+          { icon: <LogIn size={18} />, label: 'My Sign-in Log', path: '/org/my-clock' },
           { icon: <Users size={18} />, label: 'All Employees', path: '/org/employees' },
           { icon: <Clock size={18} />, label: 'Attendance List', path: '/org/attendance' },
           { icon: <Activity size={18} />, label: 'Today Attendance', path: '/org/today' },
@@ -123,6 +164,12 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <CheckSquare size={18} />, label: 'Tasks', path: '/org/tasks' },
           { icon: <Monitor size={18} />, label: 'Activity Tracker', path: '/org/tracker' },
           { icon: <Lock size={18} />, label: 'Change Password', path: '/org/change-password' },
+          { section: 'Payroll' },
+          { icon: <Wallet size={18} />, label: 'My Pay', path: '/my-pay' },
+          { icon: <Files size={18} />, label: 'My Documents', path: '/my-documents' },
+          ...(user?.isHr ? HR_ITEMS.slice(1) : [
+            { icon: <Receipt size={18} />, label: 'Expense Claims', path: '/payroll/claims' },
+          ]),
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
           // The employees in their own department.
@@ -133,6 +180,7 @@ const Sidebar = ({ role, label, iconColor }) => {
       case 'user':
         return [
           { icon: <LayoutDashboard size={18} />, label: 'Dashboard', path: '/emp/dashboard' },
+          { icon: <LogIn size={18} />, label: 'Sign In / Out', path: '/emp/clock' },
           { icon: <Clock size={18} />, label: 'Attendance List', path: '/emp/attendance' },
           { icon: <Briefcase size={18} />, label: 'Leave List', path: '/emp/leaves' },
           { icon: <CheckSquare size={18} />, label: 'My Tasks', path: '/emp/tasks' },
@@ -140,6 +188,9 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <UserCircle size={18} />, label: 'Profile', path: '/emp/profile' },
           // Employees get the vault and the dependency map, but not the audit
           // log — that needs `audit.view`, which their role does not carry.
+          { icon: <Wallet size={18} />, label: 'My Pay', path: '/my-pay' },
+          { icon: <Files size={18} />, label: 'My Documents', path: '/my-documents' },
+          ...HR_ITEMS,
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'My Vault', path: '/vault' },
           { icon: <Network size={18} />, label: 'Dependencies', path: '/vault/dependencies' },
@@ -214,6 +265,9 @@ const Sidebar = ({ role, label, iconColor }) => {
             <NavLink
               key={idx}
               to={item.path}
+              // Exact match when another item lives underneath this one, so
+              // "Payroll Runs" (/payroll) is not lit up on /payroll/people.
+              end={navItems.some((o) => o.path && o.path !== item.path && o.path.startsWith(`${item.path}/`))}
               className={({ isActive }) => `sb-item ${isActive ? `active ${role === 'superadmin' ? 'super' : role === 'user' ? 'emp' : ''}` : ''}`}
             >
               <span className="sb-icon">{item.icon}</span>

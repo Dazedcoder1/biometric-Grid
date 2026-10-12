@@ -16,7 +16,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
-export default function VaultModal({ title, onClose, children, labelledBy }) {
+export default function VaultModal({ title, onClose, children, labelledBy, width }) {
   const dialogRef = useRef(null);
   const headingId = labelledBy || 'v-modal-title';
 
@@ -76,6 +76,8 @@ export default function VaultModal({ title, onClose, children, labelledBy }) {
       <div
         ref={dialogRef}
         className="v-modal"
+        // Wider forms (payroll) ask for it; everything else keeps 460px.
+        style={width ? { width: `min(${width}px, 100%)` } : undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}

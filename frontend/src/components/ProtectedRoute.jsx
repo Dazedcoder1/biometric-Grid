@@ -11,7 +11,7 @@ import { getActingTenantId } from '../services/api';
  *                        role list cannot express this, because a Super Admin
  *                        normalises to tenant_admin.
  */
-const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
+const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false, allowHr = false }) => {
   const { user, token, authType, loading } = useAuth();
   const location = useLocation();
 
@@ -60,7 +60,8 @@ const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
     return <Navigate to="/change-password" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  // allowHr: an employee or Org Admin with HR access may open this page too.
+  if (allowedRoles && !allowedRoles.includes(user.role) && !(allowHr && user.isHr)) {
     return <Navigate to={homePathForUser(user)} replace />;
   }
 
@@ -91,7 +92,9 @@ const ProtectedRoute = ({ children, allowedRoles, superAdminOnly = false }) => {
     && !getActingTenantId()
     && (location.pathname.startsWith('/super')
       || location.pathname === '/vault/people'
-      || location.pathname === '/vault/dependencies')
+      || location.pathname === '/vault/dependencies'
+      || location.pathname.startsWith('/payroll')
+      || location.pathname.startsWith('/documents'))
   );
   if (needsOrganisation) {
     return <Navigate to="/choose-organisation" replace state={{ from: location.pathname }} />;

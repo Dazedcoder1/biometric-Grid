@@ -11,17 +11,22 @@
 // no access to until the next reload corrected it.
 //
 // Now: one form, and the role comes from the token the server returns.
+//
+// The HR portal (/hr/login) is the same form with one difference: it only lets
+// in accounts that can run payroll — someone given HR access, or a Tenant
+// Admin or Super Admin — and lands them on payroll instead of their own
+// dashboard. Anyone else is told so and signed straight back out.
 
 import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Eye, EyeOff, Lock, Moon, ShieldCheck, Sun, User,
+  ArrowRight, Briefcase, Eye, EyeOff, Lock, Moon, ShieldCheck, Sun, User,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { authApi } from '../services/api';
-import { homePathForUser, isSuperAdmin } from '../utils/roles';
+import { HR_HOME, homePathForUser, isSuperAdmin, setPortal } from '../utils/roles';
 
 /**
  * Where to land after a successful sign-in.
@@ -44,15 +49,21 @@ function destinationFor(user, from) {
   // A Super Admin works across the platform screens and, once an organisation
   // is chosen, the tenant screens — but has no vault (see ProtectedRoute).
   const allowed = isSuperAdmin(user)
-    ? ['platform', 'super', 'choose-organisation']
-    : [section(home), 'vault'];
+    ? ['platform', 'super', 'choose-organisation', 'payroll']
+    : [section(home), 'vault', 'my-pay', ...(user?.isHr ? ['payroll'] : [])];
   return allowed.includes(section(from)) ? from : home;
 }
 
-export default function Login() {
+/** Can this account use the HR portal? HR access, or an admin who has payroll anyway. */
+function canUseHr(user) {
+  return !!user && (user.isHr || user.role === 'tenant_admin');
+}
+
+export default function Login({ portal = 'main' }) {
+  const hr = portal === 'hr';
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user, loading } = useAuth();
+  const { login, logout, user, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const [identifier, setIdentifier] = useState('');
@@ -65,9 +76,14 @@ export default function Login() {
   // a form they do not need.
   useEffect(() => {
     if (!loading && user) {
+      if (hr && canUseHr(user) && !user.mustChangePassword) {
+        setPortal('hr');
+        navigate(HR_HOME, { replace: true });
+        return;
+      }
       navigate(user.mustChangePassword ? '/change-password' : homePathForUser(user), { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, hr]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -78,6 +94,18 @@ export default function Login() {
       const res = await authApi.login(identifier.trim(), password);
       const signedIn = login(res.access_token, { refreshToken: res.refresh_token });
 
+      if (hr) {
+        if (!canUseHr(signedIn)) {
+          logout();
+          setError("This account doesn't have HR access. Ask your Tenant Admin, or use the main sign-in.");
+          setPassword('');
+          return;
+        }
+        setPortal('hr');
+        navigate(signedIn.mustChangePassword ? '/change-password' : HR_HOME, { replace: true });
+        return;
+      }
+      setPortal('main');
       navigate(
         signedIn.mustChangePassword
           ? '/change-password'
@@ -117,12 +145,16 @@ export default function Login() {
           <div className="login-header">
             <div
               className="login-logo-circle"
-              style={{ background: 'rgba(0,212,170,0.12)', color: 'var(--teal)' }}
+              style={hr
+                ? { background: 'rgba(168,85,247,0.14)', color: 'var(--purple)' }
+                : { background: 'rgba(0,212,170,0.12)', color: 'var(--teal)' }}
             >
-              <ShieldCheck size={32} />
+              {hr ? <Briefcase size={30} /> : <ShieldCheck size={32} />}
             </div>
-            <h2 className="login-title">The Sentinel</h2>
-            <p className="login-subtitle">Biometric Orchestration Platform</p>
+            <h2 className="login-title">{hr ? 'HR Portal' : 'The Sentinel'}</h2>
+            <p className="login-subtitle">
+              {hr ? 'Payroll, salaries and expense claims' : 'Biometric Orchestration Platform'}
+            </p>
           </div>
 
           {error && (
@@ -194,18 +226,27 @@ export default function Login() {
             <button
               type="submit"
               className={`login-btn ${busy ? 'loading' : ''}`}
-              style={{ background: 'var(--teal)', color: 'var(--on-teal)' }}
+              style={hr
+                ? { background: 'var(--purple)', color: '#fff' }
+                : { background: 'var(--teal)', color: 'var(--on-teal)' }}
               disabled={busy}
             >
-              {busy ? 'Signing in…' : <>Sign in <ArrowRight size={18} /></>}
+              {busy ? 'Signing in…' : <>{hr ? 'Sign in to HR' : 'Sign in'} <ArrowRight size={18} /></>}
             </button>
           </form>
 
           <div className="login-footer">
-            <p>
-              Your access level is set by your account — there is nothing to
-              choose here. All actions are recorded in the audit log.
-            </p>
+            {hr ? (
+              <p>
+                For people with HR access. Not HR? <Link to="/login">Use the main sign-in</Link>.
+              </p>
+            ) : (
+              <p>
+                Your access level is set by your account — there is nothing to
+                choose here. All actions are recorded in the audit log.
+                {' '}HR team? <Link to="/hr/login">Sign in to the HR portal</Link>.
+              </p>
+            )}
           </div>
         </div>
 
