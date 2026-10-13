@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import text, or_
+from sqlalchemy import func, or_, text
 from app.db.session import get_db
-from app.models.domain import User, RefreshToken, Tenant
+from app.models.domain import Notification, RefreshToken, Tenant, User
+from app.services import notification_service
 from app.api.dependencies import get_current_user
 from app.core import activity
 from pydantic import BaseModel, EmailStr, field_validator
@@ -13,9 +14,10 @@ from app.core.security import (
     hash_password,
     create_access_token,
     create_refresh_token,
-    decode_token
+    decode_token,
+    REFRESH_TOKEN_EXPIRE_DAYS,
 )
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 import re
 import logging
@@ -93,7 +95,9 @@ def _create_auth_response(user: User, db_session: AsyncSession = None) -> dict:
     refresh_token, jti = create_refresh_token(payload)
 
     if db_session:
-        expires_at = datetime.utcnow() + timedelta(days=7)
+        # Aware UTC, matching the timestamptz column, and the configured
+        # lifetime rather than a hardcoded week.
+        expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         token_record = RefreshToken(
             user_id=user.id,
             token_jti=jti,
@@ -256,59 +260,60 @@ async def refresh_token(
     data: RefreshRequest,
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Swap a refresh token for a new access token and a new refresh token.
+
+    The frontend calls this shortly before the access token expires, and again
+    if a request comes back 401, so a session lasts as long as the person keeps
+    using it (each refresh restarts the REFRESH_TOKEN_EXPIRE_DAYS window) while
+    every access token stays short-lived.
+
+    Rotation: the presented refresh token is revoked and a new one issued, so
+    each refresh token works once.
+
+    The new tokens are built from the user's row as it is NOW, not copied from
+    the old token: a deactivated account cannot refresh, and a role change,
+    department move or HR grant reaches the session at the next refresh rather
+    than the next sign-in.
+
+    Previously this compared the timezone-aware expires_at with a naive
+    datetime.utcnow(), which raises — so every refresh failed with a 500 and
+    sessions simply died when the access token expired.
+    """
     try:
         payload = decode_token(data.refresh_token)
         if not payload or payload.get("type") != "refresh":
-            raise HTTPException(401, "Invalid refresh token")
+            raise HTTPException(401, "Your session has ended. Please sign in again.")
 
         jti = payload.get("jti")
         user_id = payload.get("user_id")
 
-        result = await db.execute(
+        token_record = (await db.execute(
             select(RefreshToken).where(
                 RefreshToken.token_jti == jti,
                 RefreshToken.user_id == user_id
             )
-        )
-        token_record = result.scalars().first()
+        )).scalars().first()
 
         if not token_record or token_record.is_revoked:
-            raise HTTPException(401, "Token revoked or not found")
+            raise HTTPException(401, "Your session has ended. Please sign in again.")
 
-        if token_record.expires_at < datetime.utcnow():
-            raise HTTPException(401, "Token expired")
+        expires_at = token_record.expires_at
+        if expires_at.tzinfo is None:                 # rows written before this fix
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(401, "Your session has expired. Please sign in again.")
+
+        holder = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
+        if not holder or not holder.is_active:
+            token_record.is_revoked = True
+            await db.commit()
+            raise HTTPException(401, "This account is no longer active.")
 
         token_record.is_revoked = True
-
-        # HR access can be granted or withdrawn between sign-ins; read it fresh
-        # so a refreshed session shows the right screens.
-        holder = (await db.execute(select(User).where(User.id == user_id))).scalars().first()
-        new_payload = {
-            "user_id": user_id,
-            "role": payload.get("role"),
-            "tenant_id": payload.get("tenant_id"),
-            "dept_id": payload.get("dept_id"),
-            "must_change_password": bool(payload.get("must_change_password", False)),
-            "is_hr": bool(getattr(holder, "is_hr", False)),
-        }
-
-        new_access = create_access_token(new_payload)
-        new_refresh, new_jti = create_refresh_token(new_payload)
-
-        expires_at = datetime.utcnow() + timedelta(days=7)
-        new_token = RefreshToken(
-            user_id=user_id,
-            token_jti=new_jti,
-            expires_at=expires_at
-        )
-        db.add(new_token)
+        tokens = _create_auth_response(holder, db)
         await db.commit()
-
-        return {
-            "access_token": new_access,
-            "refresh_token": new_refresh,
-            "token_type": "bearer"
-        }
+        return tokens
 
     except HTTPException:
         raise
@@ -316,6 +321,64 @@ async def refresh_token(
         logger.error(f"Refresh error: {str(e)}")
         await db.rollback()
         raise HTTPException(500, "Internal server error")
+
+
+class ForgotIn(BaseModel):
+    identifier: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotIn, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    "I forgot my password" — without email.
+
+    The app has no mail server, so instead of a link this tells the person's
+    administrators — their Department Admin and their Organisation Admin —
+    who reset it from the organisation tree with a temporary password. The
+    person is asked to change it at their next sign-in.
+
+    The answer is the same whether or not the account exists, so this cannot
+    be used to find out who has an account. A request for the same account
+    within 15 minutes is not repeated, so it cannot be used to flood admins
+    with notifications.
+    """
+    generic = {"message": "If that account exists, your administrator has been asked to reset "
+                          "your password. They will give you a temporary one."}
+    ident = (data.identifier or "").strip()[:120]
+    if not ident:
+        return generic
+    user = (await db.execute(select(User).where(
+        or_(func.lower(User.email) == ident.lower(), User.employee_code == ident)
+    ))).scalars().first()
+    if not user or not user.is_active or user.tenant_id is None:
+        return generic
+
+    recent = (await db.execute(select(Notification.notification_id).where(
+        Notification.event_type == "password_reset_requested", Notification.entity_id == user.id,
+        Notification.created_at >= datetime.now(timezone.utc) - timedelta(minutes=15)))).first()
+    if recent:
+        return generic
+
+    admin_q = select(User.id).where(User.tenant_id == user.tenant_id, User.is_active.is_(True), User.id != user.id)
+    if user.role == "employee" and user.dept_id:
+        admin_q = admin_q.where(
+            (User.role == "tenant_admin") | ((User.role == "org_admin") & (User.dept_id == user.dept_id)))
+    else:
+        admin_q = admin_q.where(User.role == "tenant_admin")
+    admins = (await db.execute(admin_q)).scalars().all()
+    if admins:
+        await notification_service.create_notifications_for_recipients(
+            db, tenant_id=user.tenant_id, actor_id=None, recipient_ids=list(admins),
+            event_type="password_reset_requested",
+            title=f"{user.name} asked for a password reset",
+            message="Open the Organisation tree, find them, and use Reset password to give them a temporary one.",
+            entity_type="user", entity_id=user.id, entity_name=user.name,
+        )
+    await activity.log(db, request, action="auth.password_reset_requested", tenant_id=user.tenant_id,
+                       target_type="user", target_id=user.id, details={"admins_notified": len(admins)},
+                       anonymous="unknown")
+    await db.commit()
+    return generic
 
 
 @router.post("/logout")

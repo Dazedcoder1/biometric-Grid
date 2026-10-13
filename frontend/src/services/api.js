@@ -2,6 +2,8 @@
 // src/services/api.js
 // Never localhost on a deployed site — see apiBase.js.
 import { API_BASE_URL } from './apiBase';
+// Renews an expired access token and retries once — see session.js.
+import { authorizedFetch } from './session';
 
 // Helper to get auth token
 const getToken = () => localStorage.getItem('access_token');
@@ -104,7 +106,7 @@ async function apiRequest(endpoint, options = {}) {
   
   const finalHeaders = { ...headers, ...options.headers };
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await authorizedFetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: finalHeaders,
   });
@@ -246,7 +248,7 @@ export const orgApi = {
 // Save a file the server generates (CSV, PDF) with the same headers as any
 // other call, so the acting organisation and the token go along.
 export async function downloadFile(endpoint, filename) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, { headers: pickAuthHeaders(endpoint) });
+  const response = await authorizedFetch(`${API_BASE_URL}${endpoint}`, { headers: pickAuthHeaders(endpoint) });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(describeApiError(body, response.status));
@@ -298,6 +300,26 @@ export const payrollApi = {
   myClaims: () => apiRequest('/api/payroll/me/reimbursements'),
   submitClaim: (data) => apiRequest('/api/payroll/me/reimbursements', { method: 'POST', body: JSON.stringify(data) }),
   withdrawClaim: (id) => apiRequest(`/api/payroll/me/reimbursements/${id}`, { method: 'DELETE' }),
+};
+
+// The organisation hierarchy, scoped by the server to whoever asks.
+export const orgTreeApi = {
+  tree: () => apiRequest('/api/org-tree'),
+  organisation: (tenantId) => apiRequest(`/api/org-tree/orgs/${tenantId}`),
+  search: (q) => apiRequest(`/api/org-tree/search?q=${encodeURIComponent(q)}`),
+  person: (userId) => apiRequest(`/api/org-tree/people/${userId}`),
+  addDepartment: (name, tenantId) => apiRequest('/api/org-tree/departments', {
+    method: 'POST', body: JSON.stringify({ name, tenant_id: tenantId ?? null }),
+  }),
+  assignDepartmentAdmin: (deptId, userId) => apiRequest(`/api/org-tree/departments/${deptId}/admin`, {
+    method: 'POST', body: JSON.stringify({ user_id: userId }),
+  }),
+  assignOrganisationAdmin: (tenantId, userId) => apiRequest(`/api/org-tree/orgs/${tenantId}/admin`, {
+    method: 'POST', body: JSON.stringify({ user_id: userId }),
+  }),
+  move: (userId, deptId) => apiRequest(`/api/org-tree/people/${userId}/move`, {
+    method: 'POST', body: JSON.stringify({ dept_id: deptId }),
+  }),
 };
 
 // HR documents and letters. Uploads go as multipart FormData; apiRequest
@@ -524,6 +546,11 @@ export const authApi = {
     });
   },
   
+  /** Tells the person's admins they need a reset. Same answer whether or not the account exists. */
+  forgotPassword: (identifier) => apiRequest('/api/auth/forgot-password', {
+    method: 'POST', body: JSON.stringify({ identifier }),
+  }),
+
   refreshToken: (refreshToken) => apiRequest('/api/auth/refresh', { 
     method: 'POST', 
     body: JSON.stringify({ refresh_token: refreshToken }) 
@@ -548,9 +575,13 @@ export const authApi = {
 // password in any organisation.
 export const accountsApi = {
   /** Generates a temporary password unless one is given. Returned once. */
-  resetPassword: (userId, temporaryPassword) => apiRequest(`/api/accounts/${userId}/reset-password`, {
+  // tenantId: the person's organisation. A Super Admin working from the
+  // organisation tree can reset anyone, so the request names the
+  // organisation rather than relying on the one chosen in the switcher.
+  resetPassword: (userId, temporaryPassword, tenantId) => apiRequest(`/api/accounts/${userId}/reset-password`, {
     method: 'POST',
     body: JSON.stringify({ temporary_password: temporaryPassword || null }),
+    ...(tenantId ? { headers: { 'X-Acting-Tenant-Id': String(tenantId) } } : {}),
   }),
   /** Give or take away HR access (payroll for the whole organisation). */
   setHr: (userId, isHr) => apiRequest(`/api/accounts/${userId}/hr`, {
@@ -730,7 +761,7 @@ export const vaultApi = {
       if (v !== undefined && v !== null && v !== '') q.set(k, v);
     });
 
-    const response = await fetch(
+    const response = await authorizedFetch(
       `${API_BASE_URL}/api/vault/audit/export.csv?${q.toString()}`,
       // Same headers as every other vault call, acting organisation included.
       { headers: pickAuthHeaders('/api/vault/audit/export.csv') },

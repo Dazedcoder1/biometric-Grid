@@ -50,7 +50,8 @@ function destinationFor(user, from) {
   // is chosen, the tenant screens — but has no vault (see ProtectedRoute).
   const allowed = isSuperAdmin(user)
     ? ['platform', 'super', 'choose-organisation', 'payroll']
-    : [section(home), 'vault', 'my-pay', ...(user?.isHr ? ['payroll'] : [])];
+    : [section(home), 'vault', 'my-pay', 'my-documents', 'emp', 'org',
+       ...(user?.isHr ? ['payroll', 'documents'] : [])];
   return allowed.includes(section(from)) ? from : home;
 }
 
@@ -71,6 +72,13 @@ export default function Login({ portal = 'main' }) {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [forgot, setForgot] = useState(false);
+  const [forgotSent, setForgotSent] = useState('');
+  // Sent here because the session could not be renewed (services/session.js),
+  // with the page they were on so signing in returns them to it.
+  const params = new URLSearchParams(location.search);
+  const expired = params.get('expired') === '1';
+  const returnTo = location.state?.from || params.get('from');
 
   // Already signed in — go where this person belongs rather than showing them
   // a form they do not need.
@@ -102,14 +110,15 @@ export default function Login({ portal = 'main' }) {
           return;
         }
         setPortal('hr');
-        navigate(signedIn.mustChangePassword ? '/change-password' : HR_HOME, { replace: true });
+        navigate(signedIn.mustChangePassword ? '/change-password'
+          : (returnTo ? destinationFor(signedIn, returnTo) : HR_HOME), { replace: true });
         return;
       }
       setPortal('main');
       navigate(
         signedIn.mustChangePassword
           ? '/change-password'
-          : destinationFor(signedIn, location.state?.from),
+          : destinationFor(signedIn, returnTo),
         { replace: true },
       );
     } catch (err) {
@@ -157,6 +166,15 @@ export default function Login({ portal = 'main' }) {
             </p>
           </div>
 
+          {expired && !error && (
+            <div role="status" style={{
+              background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 8,
+              padding: '0.75rem', marginBottom: '1rem', color: 'var(--warn)', fontSize: '0.85rem', textAlign: 'center',
+            }}>
+              Your session has ended. Sign in again to continue where you left off.
+            </div>
+          )}
+
           {error && (
             <div
               role="alert"
@@ -175,6 +193,49 @@ export default function Login({ portal = 'main' }) {
             </div>
           )}
 
+          {forgot ? (
+            <form className="login-form" onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true); setError('');
+              try {
+                const r = await authApi.forgotPassword(identifier.trim());
+                setForgotSent(r.message);
+              } catch (err) {
+                setError(err.message || 'Could not send the request. Try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}>
+              <p style={{ fontSize: '.85rem', color: 'var(--text2)', margin: 0 }}>
+                Enter your email or employee ID. Your Department Admin and Organisation Admin are asked to
+                reset your password; they will give you a temporary one, and you choose your own when you sign in.
+              </p>
+              {forgotSent ? (
+                <div role="status" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8, padding: '0.75rem', color: 'var(--ok)', fontSize: '0.85rem' }}>
+                  {forgotSent}
+                </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="forgot-id">Email or employee ID</label>
+                    <div className="input-wrap">
+                      <User className="input-icon" size={18} />
+                      <input id="forgot-id" type="text" className="form-input" required autoFocus
+                        value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+                    </div>
+                  </div>
+                  <button type="submit" className="login-btn" disabled={busy}
+                    style={hr ? { background: 'var(--purple)', color: '#fff' } : { background: 'var(--teal)', color: 'var(--on-teal)' }}>
+                    {busy ? 'Sending…' : 'Ask for a reset'}
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={() => { setForgot(false); setForgotSent(''); setError(''); }}
+                style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: '.85rem' }}>
+                Back to sign in
+              </button>
+            </form>
+          ) : (
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label" htmlFor="identifier">
@@ -233,7 +294,12 @@ export default function Login({ portal = 'main' }) {
             >
               {busy ? 'Signing in…' : <>{hr ? 'Sign in to HR' : 'Sign in'} <ArrowRight size={18} /></>}
             </button>
+            <button type="button" onClick={() => { setForgot(true); setError(''); }}
+              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: '.82rem', alignSelf: 'center' }}>
+              Forgot password?
+            </button>
           </form>
+          )}
 
           <div className="login-footer">
             {hr ? (

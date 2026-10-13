@@ -102,6 +102,10 @@ LABELS = {
     # leave, holidays and office hours
     "attendance.web_sign_in": "signed in (web clock)",
     "attendance.web_sign_out": "signed out (web clock)",
+    "department.admin_assigned": "assigned a Department Admin",
+    "organisation.admin_assigned": "assigned the Organisation Admin",
+    "user.transferred": "moved someone to another department",
+    "auth.password_reset_requested": "asked for a password reset",
     "user.hr_granted": "gave HR access",
     "user.hr_revoked": "removed HR access",
     "document.letterhead_updated": "updated the letterhead",

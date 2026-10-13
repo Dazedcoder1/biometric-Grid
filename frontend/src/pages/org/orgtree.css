@@ -1,0 +1,81 @@
+/* Organisation tree. Theme variables only, so light and dark both work. */
+
+.ot-bar { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.ot-bar .grow { flex: 1; }
+.ot-search { position: relative; flex: 1 1 260px; max-width: 420px; }
+.ot-search input {
+  width: 100%; height: 38px; padding: 0 .75rem 0 2.1rem; border-radius: 9px;
+  border: 1px solid var(--border2); background-color: var(--bg2); color: var(--text); font-family: inherit; font-size: .85rem;
+}
+.ot-search svg { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--text3); }
+.ot-results {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 340px; overflow-y: auto;
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+.ot-result { display: flex; gap: .6rem; align-items: center; width: 100%; padding: .5rem .7rem; border: none; background: none;
+  text-align: left; cursor: pointer; color: var(--text); font-family: inherit; border-top: 1px solid var(--border); }
+.ot-result:first-child { border-top: none; }
+.ot-result:hover { background: var(--bg3); }
+
+.ot-tree { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: .8rem; box-shadow: var(--shadow); }
+
+.ot-node { margin: 0; }
+.ot-children { margin-left: 1.05rem; padding-left: .9rem; border-left: 1px dashed var(--border2); }
+@media (max-width: 560px) { .ot-children { margin-left: .5rem; padding-left: .55rem; } }
+
+.ot-row {
+  display: flex; align-items: center; gap: .55rem; padding: .42rem .5rem; border-radius: 9px;
+  min-height: 40px; color: var(--text); flex-wrap: wrap;
+}
+.ot-row.clickable { cursor: pointer; }
+.ot-row.clickable:hover { background: var(--bg3); }
+.ot-row.hit { background: rgba(20,184,166,.14); box-shadow: inset 2px 0 0 var(--teal); }
+.ot-toggle { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: none;
+  background: none; color: var(--text3); cursor: pointer; border-radius: 6px; flex: none; }
+.ot-toggle:hover { background: var(--bg4); color: var(--text); }
+.ot-spacer { width: 22px; flex: none; }
+
+.ot-kind { width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ot-kind.platform { background: rgba(236,72,153,.14); color: #ec4899; }
+.ot-kind.org { background: rgba(168,85,247,.14); color: var(--purple); }
+.ot-kind.dept { background: rgba(59,130,246,.12); color: var(--info); }
+.ot-kind.group { background: var(--bg3); color: var(--text3); }
+
+.ot-avatar {
+  width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; flex: none; letter-spacing: .02em;
+}
+.ot-avatar.tenant_admin { background: rgba(168,85,247,.16); color: var(--purple); }
+.ot-avatar.org_admin { background: rgba(20,184,166,.16); color: var(--teal); }
+.ot-avatar.employee { background: rgba(245,158,11,.14); color: var(--warn); }
+.ot-avatar.super_admin { background: rgba(236,72,153,.16); color: #ec4899; }
+.ot-avatar.big { width: 52px; height: 52px; font-size: 1.05rem; }
+
+.ot-name { font-weight: 600; font-size: .88rem; }
+.ot-meta { font-size: .74rem; color: var(--text3); font-family: var(--mono); }
+.ot-role { font-size: .66rem; font-weight: 700; padding: .08rem .45rem; border-radius: 999px; white-space: nowrap; }
+.ot-role.tenant_admin { background: rgba(168,85,247,.14); color: var(--purple); }
+.ot-role.org_admin { background: rgba(20,184,166,.14); color: var(--teal); }
+.ot-role.employee { background: var(--bg3); color: var(--text3); }
+.ot-role.hr { background: rgba(59,130,246,.12); color: var(--info); }
+.ot-count { font-size: .72rem; color: var(--text3); }
+.ot-warn { font-size: .68rem; font-weight: 600; padding: .08rem .45rem; border-radius: 999px; background: rgba(245,158,11,.14); color: var(--warn); white-space: nowrap; }
+.ot-actions { margin-left: auto; display: flex; gap: .35rem; flex-wrap: wrap; }
+.ot-mini {
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text2); border-radius: 7px;
+  padding: .2rem .5rem; font-size: .72rem; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: .25rem;
+}
+.ot-mini:hover { color: var(--text); border-color: var(--border2); }
+.ot-empty { font-size: .78rem; color: var(--text3); padding: .3rem .5rem .3rem 2.4rem; }
+
+.ot-inline { display: flex; gap: .4rem; align-items: center; padding: .3rem .5rem .5rem 2.4rem; flex-wrap: wrap; }
+.ot-inline input, .ot-inline select {
+  height: 34px; padding: 0 .6rem; border-radius: 8px; border: 1px solid var(--border2);
+  background-color: var(--bg2); color: var(--text); font-family: inherit; font-size: .82rem; min-width: 180px;
+}
+
+.ot-profile-head { display: flex; gap: .9rem; align-items: center; margin: .4rem 0 1rem; }
+.ot-temp {
+  font-family: var(--mono); font-size: 1rem; padding: .5rem .7rem; border-radius: 8px; background: var(--bg3);
+  border: 1px dashed var(--teal); color: var(--text); user-select: all; word-break: break-all;
+}

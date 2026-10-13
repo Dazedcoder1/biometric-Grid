@@ -11,6 +11,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { userFromToken } from '../utils/roles';
+import { SESSION_EVENT, SESSION_KEYS, scheduleRenewal } from '../services/session';
 
 const AuthContext = createContext();
 
@@ -51,6 +52,39 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, authType]);
 
+  // Keep the session alive: renew the access token shortly before it expires
+  // and whenever the tab wakes up (services/session.js). API-key sessions
+  // have nothing to renew.
+  useEffect(() => {
+    if (authType === 'api_key' || !token) return undefined;
+    return scheduleRenewal(token);
+  }, [token, authType]);
+
+  // A renewal (in this tab or another) or a session that could not be
+  // renewed. The new token re-derives the user, so a role or HR change made
+  // by an admin shows up at the next renewal without signing in again.
+  useEffect(() => {
+    const onSession = (e) => {
+      if (e.detail?.ended) {
+        setToken(null);
+        setUser(null);
+      } else if (e.detail?.token) {
+        setToken(e.detail.token);
+      }
+    };
+    const onStorage = (e) => {
+      if (e.key !== 'access_token') return;
+      if (e.newValue) setToken(e.newValue);
+      else if (localStorage.getItem('auth_type') !== 'api_key') { setToken(null); setUser(null); }
+    };
+    window.addEventListener(SESSION_EVENT, onSession);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, onSession);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
   /**
    * Start a session from an access token.
    *
@@ -86,13 +120,10 @@ export const AuthProvider = ({ children }) => {
     // Listed explicitly rather than clearing everything: localStorage is shared
     // with the theme preference and anything else the app keeps, and signing
     // out should not reset the interface.
-    for (const key of [
-      'access_token', 'refresh_token', 'api_key', 'auth_type', 'user',
-      'token', 'userData', 'user_role', 'username', 'password',
-      // The organisation a Super Admin was acting within. Left behind, the
-      // next person to sign in on this machine would silently inherit it.
-      'acting_tenant_id', 'acting_tenant_name',
-    ]) {
+    // SESSION_KEYS includes the organisation a Super Admin was acting
+    // within: left behind, the next person to sign in on this machine would
+    // silently inherit it.
+    for (const key of SESSION_KEYS) {
       localStorage.removeItem(key);
     }
 

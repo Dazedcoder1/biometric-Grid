@@ -165,6 +165,11 @@ from app.api.routes.documents import router as documents_router
 
 app.include_router(documents_router, prefix="/api/documents", tags=["HR Documents"])
 
+# ─── Organisation hierarchy ───────────────────────────────────────────────────
+from app.api.routes.org_tree import router as org_tree_router
+
+app.include_router(org_tree_router, prefix="/api/org-tree", tags=["Organisation tree"])
+
 # ─── Employee (uses JWT Bearer) ───────────────────────────────────────────────
 from app.api.routes.employee.dashboard      import router as emp_dash_router
 from app.api.routes.employee.profile        import router as emp_profile_router
