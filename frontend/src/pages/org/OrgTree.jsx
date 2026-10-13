@@ -15,8 +15,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, AlertTriangle, ArrowRightLeft, Building2, ChevronDown, ChevronRight, Copy, Crown,
-  FolderPlus, KeyRound, Network, RefreshCw, Search, Shield, Users,
+  AlertCircle, AlertTriangle, ArrowRightLeft, Building2, ChevronsDownUp, ChevronsUpDown, Copy, Crown,
+  FolderPlus, KeyRound, Maximize2, Minus, Network, Plus, RefreshCw, Search, Shield, Users, ZoomIn, ZoomOut,
 } from 'lucide-react';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
@@ -34,137 +34,185 @@ function Avatar({ p, big }) {
   return <span className={`ot-avatar ${p.role} ${big ? 'big' : ''}`} aria-hidden="true">{p.initials}</span>;
 }
 
-function PersonRow({ p, onOpen, hit }) {
+function PersonCard({ p, onOpen, hit }) {
   return (
-    <div className={`ot-row clickable ${hit ? 'hit' : ''}`} role="button" tabIndex={0}
-      onClick={() => onOpen(p)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p); }}>
-      <span className="ot-spacer" />
+    <button type="button" className={`oc-person ${p.role} ${hit ? 'hit' : ''}`} data-person={p.id}
+      onClick={() => onOpen(p)} title={`${p.name} — ${p.role_label}`}>
       <Avatar p={p} />
-      <span className="ot-name">{p.name}{p.is_me ? ' (you)' : ''}</span>
-      {p.employee_code && <span className="ot-meta">{p.employee_code}</span>}
-      <span className={`ot-role ${p.role}`}>{p.role_label}</span>
-      {p.is_hr && <span className="ot-role hr">HR</span>}
-    </div>
+      <span className="oc-person-text">
+        <span className="oc-person-name">{p.name}{p.is_me ? ' (you)' : ''}</span>
+        <span className="oc-person-sub">
+          {p.employee_code ? <span className="code">{p.employee_code}</span> : p.role_label}
+          {p.is_hr && <span className="ot-role hr">HR</span>}
+        </span>
+      </span>
+    </button>
   );
 }
 
-function Branch({ open, onToggle, icon, kind, title, sub, warnings = [], actions, children, hit }) {
+/** Employees reporting to one admin: a compact column, so a big team does not make the chart miles wide. */
+function Team({ people, onOpen, hitId }) {
+  if (!people.length) return <div className="oc-team-empty">No employees yet</div>;
   return (
-    <div className="ot-node">
-      <div className={`ot-row ${hit ? 'hit' : ''}`}>
-        <button type="button" className="ot-toggle" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}>
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+    <div className="oc-team">
+      {people.map((p) => (
+        <button key={p.id} type="button" className={`oc-member ${hitId === p.id ? 'hit' : ''}`} data-person={p.id} onClick={() => onOpen(p)}>
+          <Avatar p={p} />
+          <span className="oc-person-text">
+            <span className="oc-person-name">{p.name}{p.is_me ? ' (you)' : ''}</span>
+            <span className="oc-person-sub">
+              {p.employee_code ? <span className="code">{p.employee_code}</span> : 'Employee'}
+              {p.is_hr && <span className="ot-role hr">HR</span>}
+            </span>
+          </span>
         </button>
-        <span className={`ot-kind ${kind}`}>{icon}</span>
-        <span className="ot-name" style={{ cursor: 'pointer' }} onClick={onToggle}>{title}</span>
-        {sub && <span className="ot-count">{sub}</span>}
-        {warnings.map((w) => <span key={w} className="ot-warn"><AlertTriangle size={10} /> {w}</span>)}
-        {actions && <span className="ot-actions">{actions}</span>}
-      </div>
-      {open && <div className="ot-children">{children}</div>}
+      ))}
     </div>
   );
 }
 
-function AddDepartment({ tenantId, onDone }) {
+function Card({ kind, icon, title, sub, warnings = [], open, onToggle, hasChildren, actions }) {
+  return (
+    <div className={`oc-card ${kind}`}>
+      <div className="oc-card-head">
+        <span className={`ot-kind ${kind}`}>{icon}</span>
+        <span className="oc-card-text">
+          <span className="oc-card-title">{title}</span>
+          {sub && <span className="oc-card-sub">{sub}</span>}
+        </span>
+      </div>
+      {warnings.length > 0 && (
+        <div className="oc-warns">{warnings.map((w) => <span key={w} className="ot-warn"><AlertTriangle size={10} /> {w}</span>)}</div>
+      )}
+      {actions && <div className="oc-card-actions">{actions}</div>}
+      {hasChildren && (
+        <button type="button" className="oc-toggle" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}>
+          {open ? <Minus size={12} /> : <Plus size={12} />}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DepartmentNode({ d, canManage, open, toggle, onOpen, onAssign, hitId }) {
+  const [first, ...more] = d.admins;
+  return (
+    <>
+      <Card kind="dept" icon={<Users size={15} />} title={d.name}
+        sub={`${d.count} ${d.count === 1 ? 'person' : 'people'}`} warnings={d.warnings}
+        open={open} onToggle={toggle} hasChildren={d.count > 0 || canManage}
+        actions={canManage && d.is_active && (
+          <button type="button" className="ot-mini" onClick={() => onAssign(d)}>
+            <Shield size={11} /> {d.admins.length ? 'Replace admin' : 'Assign admin'}
+          </button>
+        )} />
+      {open && (
+        <ul>
+          {first ? (
+            <li>
+              <PersonCard p={first} onOpen={onOpen} hit={hitId === first.id} />
+              <Team people={d.employees} onOpen={onOpen} hitId={hitId} />
+            </li>
+          ) : (
+            <li><Team people={d.employees} onOpen={onOpen} hitId={hitId} /></li>
+          )}
+          {more.map((p) => <li key={p.id}><PersonCard p={p} onOpen={onOpen} hit={hitId === p.id} /></li>)}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function OrganisationNode({ org, isOpen, toggle, openSet, toggleSet, onOpen, onAddDept, onAssign, hitId }) {
+  const loaded = org.departments !== undefined;
+  const deptCount = org.departments_count ?? (loaded ? org.departments.length : 0);
+  return (
+    <>
+      <Card kind="org" icon={<Building2 size={15} />} title={org.name}
+        sub={`${org.count} people · ${deptCount} ${deptCount === 1 ? 'department' : 'departments'}`}
+        warnings={org.warnings} open={isOpen} onToggle={toggle} hasChildren
+        actions={org.can_manage && !org.partial && (
+          <button type="button" className="ot-mini" onClick={() => onAddDept(org)}><FolderPlus size={11} /> Add department</button>
+        )} />
+      {isOpen && (
+        <ul>
+          {!loaded && <li><div className="oc-team-empty">Loading…</div></li>}
+          {loaded && (org.admins.length ? org.admins : [null]).map((p, i) => (
+            <li key={p ? `a${p.id}` : `noadmin${i}`}>
+              <div className="oc-label"><Crown size={11} /> Organisation Admin</div>
+              {p ? <PersonCard p={p} onOpen={onOpen} hit={hitId === p.id} /> : <div className="oc-team-empty">None assigned</div>}
+            </li>
+          ))}
+          {loaded && org.departments.map((d) => (
+            <li key={d.id}>
+              <DepartmentNode d={d} canManage={org.can_manage} open={openSet.has(`d${d.id}`)}
+                toggle={() => toggleSet(`d${d.id}`)} onOpen={onOpen} onAssign={onAssign} hitId={hitId} />
+            </li>
+          ))}
+          {loaded && org.unassigned?.length > 0 && (
+            <li>
+              <Card kind="group" icon={<Users size={14} />} title="Not in a department" sub={`${org.unassigned.length}`}
+                open={openSet.has(`u${org.id}`)} onToggle={() => toggleSet(`u${org.id}`)} hasChildren />
+              {openSet.has(`u${org.id}`) && <ul><li><Team people={org.unassigned} onOpen={onOpen} hitId={hitId} /></li></ul>}
+            </li>
+          )}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function AddDepartmentModal({ org, onClose, onDone }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   return (
-    <form className="ot-inline" onSubmit={async (e) => {
-      e.preventDefault();
-      setBusy(true); setError('');
-      try { await orgTreeApi.addDepartment(name, tenantId); setName(''); onDone(`Department ${name} added.`); }
-      catch (err) { setError(err.message); }
-      finally { setBusy(false); }
-    }}>
-      <input autoFocus required minLength={2} maxLength={80} placeholder="New department name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit" className="ot-mini" disabled={busy}><FolderPlus size={12} /> Add</button>
-      {error && <span style={{ color: 'var(--bad)', fontSize: '.75rem' }}>{error}</span>}
-    </form>
+    <VaultModal title={`Add a department to ${org.name}`} onClose={onClose}>
+      <form style={{ marginTop: '.8rem' }} onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true); setError('');
+        try { await orgTreeApi.addDepartment(name, org.id); onDone(`Department ${name} added to ${org.name}.`); }
+        catch (err) { setError(err.message); setBusy(false); }
+      }}>
+        <label className="pr-field"><span>Department name</span>
+          <input autoFocus required minLength={2} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Finance" /></label>
+        {error && <div className="v-banner bad" style={{ marginTop: '.8rem' }}><AlertCircle size={14} /><span>{error}</span></div>}
+        <div className="pr-actions">
+          <button type="button" className="v-btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="pr-btn-primary" disabled={busy}><FolderPlus size={14} /> Add department</button>
+        </div>
+      </form>
+    </VaultModal>
   );
 }
 
-function AssignDeptAdmin({ dept, onDone }) {
+function AssignAdminModal({ dept, onClose, onDone }) {
   const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const candidates = dept.employees;
+  const current = dept.admins.map((a) => a.name).join(', ');
   return (
-    <form className="ot-inline" onSubmit={async (e) => {
-      e.preventDefault();
-      const who = candidates.find((c) => String(c.id) === userId);
-      const current = dept.admins.map((a) => a.name).join(', ');
-      if (!window.confirm(`Make ${who?.name} the Department Admin of ${dept.name}?${current ? `\n${current} will become an employee.` : ''}`)) return;
-      setBusy(true); setError('');
-      try { const r = await orgTreeApi.assignDepartmentAdmin(dept.id, Number(userId)); onDone(r.message); }
-      catch (err) { setError(err.message); }
-      finally { setBusy(false); }
-    }}>
-      <select required value={userId} onChange={(e) => setUserId(e.target.value)}>
-        <option value="">Choose an employee of {dept.name}…</option>
-        {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}{c.employee_code ? ` (${c.employee_code})` : ''}</option>)}
-      </select>
-      <button type="submit" className="ot-mini" disabled={busy || !userId}><Shield size={12} /> Make admin</button>
-      {candidates.length === 0 && <span className="ot-count">No employees in this department yet.</span>}
-      {error && <span style={{ color: 'var(--bad)', fontSize: '.75rem' }}>{error}</span>}
-    </form>
-  );
-}
-
-function Department({ d, canManage, open, toggle, onOpen, onChanged, hitId }) {
-  const [assigning, setAssigning] = useState(false);
-  return (
-    <Branch open={open} onToggle={toggle} kind="dept" icon={<Users size={15} />} title={d.name}
-      sub={`${d.count} ${d.count === 1 ? 'person' : 'people'}`} warnings={d.warnings}
-      actions={canManage && d.is_active && (
-        <button type="button" className="ot-mini" onClick={() => setAssigning((x) => !x)}>
-          <Shield size={11} /> {d.admins.length ? 'Replace admin' : 'Assign admin'}
-        </button>
-      )}>
-      {assigning && <AssignDeptAdmin dept={d} onDone={(m) => { setAssigning(false); onChanged(m); }} />}
-      {d.admins.map((p) => <PersonRow key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
-      {d.employees.map((p) => <PersonRow key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
-      {d.admins.length + d.employees.length === 0 && <div className="ot-empty">Nobody in this department yet.</div>}
-    </Branch>
-  );
-}
-
-function Organisation({ org, isOpen, toggle, openSet, toggleSet, onOpen, onChanged, hitId }) {
-  const [adding, setAdding] = useState(false);
-  const loaded = org.departments !== undefined;
-  return (
-    <Branch open={isOpen} onToggle={toggle} kind="org" icon={<Building2 size={15} />} title={org.name}
-      sub={`${org.count} people${org.departments_count != null ? ` · ${org.departments_count} departments` : loaded ? ` · ${org.departments.length} departments` : ''}`}
-      warnings={org.warnings}
-      actions={org.can_manage && !org.partial && (
-        <button type="button" className="ot-mini" onClick={() => { setAdding((x) => !x); if (!isOpen) toggle(); }}>
-          <FolderPlus size={11} /> Add department
-        </button>
-      )}>
-      {adding && <AddDepartment tenantId={org.id} onDone={(m) => { setAdding(false); onChanged(m); }} />}
-      {!loaded && <div className="ot-empty">Loading…</div>}
-      {loaded && (
-        <>
-          <div className="ot-row"><span className="ot-spacer" /><span className="ot-kind group"><Crown size={14} /></span>
-            <span className="ot-count">Organisation Admin</span></div>
-          <div className="ot-children">
-            {org.admins.map((p) => <PersonRow key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
-            {org.admins.length === 0 && <div className="ot-empty">None assigned.{org.can_assign_org_admin ? ' Open a person and choose “Make Organisation Admin”.' : ''}</div>}
-          </div>
-          {org.departments.map((d) => (
-            <Department key={d.id} d={d} canManage={org.can_manage} open={openSet.has(`d${d.id}`)}
-              toggle={() => toggleSet(`d${d.id}`)} onOpen={onOpen} onChanged={onChanged} hitId={hitId} />
-          ))}
-          {org.unassigned?.length > 0 && (
-            <Branch open={openSet.has(`u${org.id}`)} onToggle={() => toggleSet(`u${org.id}`)} kind="group"
-              icon={<Users size={14} />} title="Not in a department" sub={`${org.unassigned.length}`}>
-              {org.unassigned.map((p) => <PersonRow key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
-            </Branch>
-          )}
-        </>
-      )}
-    </Branch>
+    <VaultModal title={`Department Admin of ${dept.name}`} onClose={onClose}>
+      <form style={{ marginTop: '.8rem' }} onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true); setError('');
+        try { const r = await orgTreeApi.assignDepartmentAdmin(dept.id, Number(userId)); onDone(r.message); }
+        catch (err) { setError(err.message); setBusy(false); }
+      }}>
+        <label className="pr-field"><span>Choose an employee of {dept.name}</span>
+          <select required value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">Choose…</option>
+            {dept.employees.map((c) => <option key={c.id} value={c.id}>{c.name}{c.employee_code ? ` (${c.employee_code})` : ''}</option>)}
+          </select></label>
+        {current && <p className="pr-sub">{current} will become an employee of {dept.name}. One admin per department.</p>}
+        {dept.employees.length === 0 && <p className="pr-sub">Nobody to choose yet — move or add an employee to this department first.</p>}
+        {error && <div className="v-banner bad" style={{ marginTop: '.8rem' }}><AlertCircle size={14} /><span>{error}</span></div>}
+        <div className="pr-actions">
+          <button type="button" className="v-btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="pr-btn-primary" disabled={busy || !userId}><Shield size={14} /> Make Department Admin</button>
+        </div>
+      </form>
+    </VaultModal>
   );
 }
 
@@ -292,6 +340,9 @@ export default function OrgTree() {
   const [results, setResults] = useState(null);
   const [hitId, setHitId] = useState(null);
   const [tick, setTick] = useState(0);
+  const [zoom, setZoom] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 700 ? 0.8 : 1));
+  const [addingTo, setAddingTo] = useState(null);
+  const [assigning, setAssigning] = useState(null);
   const openRef = useRef(open);
   useEffect(() => { openRef.current = open; }, [open]);
 
@@ -330,8 +381,11 @@ export default function OrgTree() {
     const opening = !openRef.current.has(key);
     toggle(key);
     if (opening && data?.scope === 'platform') {
-      try { const o = await orgTreeApi.organisation(oid); setOrgDetail((m) => ({ ...m, [oid]: o })); }
-      catch (err) { setError(err.message); }
+      try {
+        const o = await orgTreeApi.organisation(oid);
+        setOrgDetail((m) => ({ ...m, [oid]: o }));
+        setOpen((st) => new Set([...st, ...o.departments.map((d) => `d${d.id}`)]));
+      } catch (err) { setError(err.message); }
     }
   }, [data, toggle]);
 
@@ -362,11 +416,41 @@ export default function OrgTree() {
     setPerson(p.id);
   };
 
+  // Bring a searched-for person into view once their branch has rendered.
+  useEffect(() => {
+    if (!hitId) return undefined;
+    const t = setTimeout(() => {
+      document.querySelector(`[data-person="${hitId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [hitId, orgDetail, open]);
+
   const orgs = useMemo(() => {
     if (!data) return [];
     if (data.scope === 'platform') return data.root.organisations.map((o) => ({ ...o, ...(orgDetail[o.id] || {}) }));
     return [data.root];
   }, [data, orgDetail]);
+
+  // Keep the top of the tree centred as branches open and close — until the
+  // person scrolls or drags the chart themselves, then leave it where they put it.
+  const viewportRef = useRef(null);
+  const userMoved = useRef(false);
+  useEffect(() => {
+    const v = viewportRef.current;
+    if (!v || !data || userMoved.current) return undefined;
+    const id = requestAnimationFrame(() => { v.scrollLeft = Math.max(0, (v.scrollWidth - v.clientWidth) / 2); });
+    return () => cancelAnimationFrame(id);
+  }, [data, orgDetail, open, zoom]);
+
+  const expandAll = () => {
+    const keys = ['root'];
+    orgs.forEach((o) => {
+      keys.push(`o${o.id}`);
+      (o.departments || []).forEach((d) => keys.push(`d${d.id}`));
+      if (o.unassigned?.length) keys.push(`u${o.id}`);
+    });
+    setOpen(new Set(keys));
+  };
 
   const scopeText = {
     platform: 'Every organisation on the platform.',
@@ -408,23 +492,54 @@ export default function OrgTree() {
       {error && <div className="v-banner bad"><AlertCircle size={14} /><span>{error}</span></div>}
       {notice && <div className="v-banner ok"><span>{notice}</span></div>}
 
-      <div className="ot-tree">
-        {!data && !error && <div className="ot-empty">Loading…</div>}
-        {data?.scope === 'platform' && (
-          <Branch open={open.has('root')} onToggle={() => toggle('root')} kind="platform" icon={<Network size={15} />}
-            title="Super Admin" sub={`${orgs.length} organisations`}>
-            {orgs.map((o) => (
-              <Organisation key={o.id} org={o} isOpen={open.has(`o${o.id}`)} toggle={() => expandOrg(o.id)}
-                openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)} onChanged={changed} hitId={hitId} />
-            ))}
-          </Branch>
-        )}
-        {data && data.scope !== 'platform' && orgs.map((o) => (
-          <Organisation key={o.id || 'org'} org={o} isOpen={open.has(`o${o.id}`)} toggle={() => toggle(`o${o.id}`)}
-            openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)} onChanged={changed} hitId={hitId} />
-        ))}
+      <div className="oc-tools">
+        <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))} aria-label="Zoom out"><ZoomOut size={13} /></button>
+        <span className="ot-count" style={{ minWidth: 38, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+        <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} aria-label="Zoom in"><ZoomIn size={13} /></button>
+        <button type="button" className="ot-mini" onClick={() => setZoom(1)}><Maximize2 size={12} /> 100%</button>
+        <span className="grow" />
+        <button type="button" className="ot-mini" onClick={expandAll}><ChevronsUpDown size={12} /> Expand all</button>
+        <button type="button" className="ot-mini" onClick={() => setOpen(new Set(['root']))}><ChevronsDownUp size={12} /> Collapse all</button>
       </div>
 
+      <div className="oc-viewport" ref={viewportRef}
+        onWheel={() => { userMoved.current = true; }} onPointerDown={() => { userMoved.current = true; }}>
+        {!data && !error && <div className="oc-team-empty" style={{ margin: '2rem auto' }}>Loading…</div>}
+        {data && (
+          <div className="oc" style={{ zoom }}>
+            <ul>
+              {data.scope === 'platform' ? (
+                <li>
+                  <Card kind="platform" icon={<Network size={15} />} title="Super Admin"
+                    sub={`${orgs.length} organisations`} open={open.has('root')} onToggle={() => toggle('root')} hasChildren />
+                  {open.has('root') && (
+                    <ul>
+                      {orgs.map((o) => (
+                        <li key={o.id}>
+                          <OrganisationNode org={o} isOpen={open.has(`o${o.id}`)} toggle={() => expandOrg(o.id)}
+                            openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)}
+                            onAddDept={setAddingTo} onAssign={setAssigning} hitId={hitId} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ) : orgs.map((o) => (
+                <li key={o.id || 'org'}>
+                  <OrganisationNode org={o} isOpen={open.has(`o${o.id}`)} toggle={() => toggle(`o${o.id}`)}
+                    openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)}
+                    onAddDept={setAddingTo} onAssign={setAssigning} hitId={hitId} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {addingTo && <AddDepartmentModal org={addingTo} onClose={() => setAddingTo(null)}
+        onDone={(m) => { setAddingTo(null); changed(m); }} />}
+      {assigning && <AssignAdminModal dept={assigning} onClose={() => setAssigning(null)}
+        onDone={(m) => { setAssigning(null); changed(m); }} />}
       {person && <PersonPanel id={person} onClose={() => setPerson(null)} onChanged={changed} />}
     </DashboardLayout>
   );
