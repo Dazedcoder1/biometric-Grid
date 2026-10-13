@@ -79,3 +79,171 @@
   font-family: var(--mono); font-size: 1rem; padding: .5rem .7rem; border-radius: 8px; background: var(--bg3);
   border: 1px dashed var(--teal); color: var(--text); user-select: all; word-break: break-all;
 }
+
+/* ── org chart ────────────────────────────────────────────────────────────────
+ * A top-down tree drawn with nested lists. Each <li> draws the line up to its
+ * siblings' bar (::before / ::after), and each nested <ul> draws the line down
+ * from its parent (ul ul::before). Pure CSS, so it follows the theme and needs
+ * no layout library. */
+
+.oc-tools { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.oc-tools .grow { flex: 1; }
+
+.oc-viewport {
+  overflow: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 1.4rem 1rem 2rem;
+  min-height: 320px;
+  max-height: calc(100vh - 240px);
+  /* Faint dot grid, so the chart reads as a canvas rather than a page. */
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.oc { display: inline-block; min-width: 100%; text-align: center; }
+.oc ul {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 22px 0 0;
+}
+.oc > ul { padding-top: 0; }
+.oc li {
+  position: relative;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 10px 0;
+}
+.oc > ul > li { padding-top: 0; }
+
+/* The horizontal bar over siblings, and the drop to each child. */
+.oc li::before, .oc li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 22px;
+  border-top: 2px solid var(--border2);
+}
+.oc li::after { right: auto; left: 50%; border-left: 2px solid var(--border2); }
+.oc li:only-child::before, .oc li:only-child::after { display: none; }
+.oc li:only-child { padding-top: 22px; }
+.oc > ul > li:only-child { padding-top: 0; }
+.oc li:only-child > .oc-card, .oc li:only-child > .oc-person, .oc li:only-child > .oc-label, .oc li:only-child > .oc-team { position: relative; }
+.oc ul ul > li:only-child::after { display: block; border-top: none; left: 50%; width: 0; }
+.oc li:first-child::before, .oc li:last-child::after { border: 0 none; }
+.oc li:last-child::before { border-right: 2px solid var(--border2); border-radius: 0 8px 0 0; }
+.oc li:first-child::after { border-radius: 8px 0 0 0; }
+/* The drop from a parent card to its children's bar. */
+.oc ul ul::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 22px;
+  border-left: 2px solid var(--border2);
+}
+
+/* Cards: platform, organisation, department. */
+.oc-card {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  min-width: 170px;
+  max-width: 320px;
+  padding: .7rem .9rem .85rem;
+  border-radius: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+.oc-card.platform { border-top: 3px solid #ec4899; }
+.oc-card.org { border-top: 3px solid var(--purple); }
+.oc-card.dept { border-top: 3px solid var(--info); }
+.oc-card-head { display: flex; align-items: center; gap: .5rem; }
+.oc-card-text { display: flex; flex-direction: column; align-items: flex-start; text-align: left; min-width: 0; }
+.oc-card-title { font-weight: 700; font-size: .9rem; color: var(--text); white-space: nowrap; line-height: 1.25; }
+.oc-card-sub { font-size: .7rem; color: var(--text3); white-space: nowrap; line-height: 1.3; }
+.oc-warns { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: center; }
+.oc-card-actions { display: flex; gap: .3rem; flex-wrap: wrap; justify-content: center; }
+.oc-toggle {
+  position: absolute;
+  bottom: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.oc-toggle:hover { color: var(--text); border-color: var(--teal); }
+
+/* People. */
+.oc-person, .oc-member {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  border-radius: 999px;
+  padding: .3rem .8rem .3rem .3rem;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 1px 6px rgba(0,0,0,.05);
+  transition: border-color .12s, box-shadow .12s;
+}
+.oc-person:hover, .oc-member:hover { border-color: var(--teal); }
+.oc-person.tenant_admin { border-color: rgba(168,85,247,.45); }
+.oc-person.org_admin { border-color: rgba(20,184,166,.45); }
+.oc-person.hit, .oc-member.hit { box-shadow: 0 0 0 3px rgba(20,184,166,.35); border-color: var(--teal); }
+.oc-person, .oc-member { flex: none; white-space: nowrap; }
+.oc-person-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.25; }
+.oc-person-name { font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.oc-person-sub { font-size: .68rem; color: var(--text3); display: inline-flex; gap: .3rem; align-items: center; white-space: nowrap; }
+.oc-person-sub .code { font-family: var(--mono); font-size: .66rem; }
+.oc-label {
+  font-size: .64rem; color: var(--text3); display: inline-flex; gap: .3rem; align-items: center;
+  margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; line-height: 1;
+  background: var(--bg2); padding: .15rem .4rem; border-radius: 6px;
+}
+/* The label sits on the connector, so the line runs into it rather than past it. */
+.oc li > .oc-label + .oc-person { margin-top: 0; }
+
+/* A team hangs under its admin as a column, joined by one line. */
+.oc-team {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .35rem;
+  margin-top: 18px;
+  padding-top: 0;
+}
+.oc-person + .oc-team::before {
+  content: '';
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  height: 18px;
+  border-left: 2px solid var(--border2);
+}
+.oc-member { border-radius: 10px; }
+.oc-team-empty { white-space: nowrap; font-size: .72rem; color: var(--text3); padding: .4rem .6rem; border: 1px dashed var(--border2); border-radius: 8px; margin-top: 6px; background: var(--bg2); }
