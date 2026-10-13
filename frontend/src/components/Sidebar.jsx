@@ -3,7 +3,7 @@ import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import {
   Building2, ChevronsUpDown, IndianRupee, Key, LayoutGrid, Lock, LogIn, LogOut, Monitor, Receipt,
-  FileSignature, FolderOpen, Files, ScrollText as PolicyIcon, SlidersHorizontal, Stamp, Timer, Wallet,
+  FileSignature, FolderOpen, Files, GitFork, ScrollText as PolicyIcon, SlidersHorizontal, Stamp, Timer, Wallet,
 } from 'lucide-react';
 import { 
   BarChart3, 
@@ -92,6 +92,8 @@ const Sidebar = ({ role, label, iconColor }) => {
       const items = [
         { section: 'Platform' },
         { icon: <LayoutGrid size={18} />, label: 'Organisations', path: PLATFORM_HOME },
+        // Every organisation, its admins, departments and people.
+        { icon: <GitFork size={18} />, label: 'Organisation Tree', path: '/organisation' },
         // Works with or without an organisation chosen: without one it shows
         // every organisation's activity.
         { icon: <ScrollText size={18} />, label: 'Audit Log', path: '/vault/audit' },
@@ -114,6 +116,7 @@ const Sidebar = ({ role, label, iconColor }) => {
       case 'superadmin':
         return [
           { icon: <BarChart3 size={18} />, label: 'Dashboard', path: '/super/dashboard' },
+          { icon: <GitFork size={18} />, label: 'Organisation Tree', path: '/organisation' },
           { icon: <Users size={18} />, label: 'Employees', path: '/super/employees' },
           { icon: <Package size={18} />, label: 'Departments', path: '/super/departments' },
           { icon: <Shield size={18} />, label: 'Org Admins', path: '/super/org-admins' },
@@ -152,6 +155,7 @@ const Sidebar = ({ role, label, iconColor }) => {
       case 'orgadmin':
         return [
           { icon: <LayoutDashboard size={18} />, label: 'Dashboard', path: '/org/dashboard' },
+          { icon: <GitFork size={18} />, label: 'Organisation Tree', path: '/organisation' },
           { icon: <Timer size={18} />, label: 'Team Sign-ins', path: '/org/clock-team' },
           { icon: <LogIn size={18} />, label: 'My Sign-in Log', path: '/org/my-clock' },
           { icon: <Users size={18} />, label: 'All Employees', path: '/org/employees' },
@@ -180,6 +184,7 @@ const Sidebar = ({ role, label, iconColor }) => {
       case 'user':
         return [
           { icon: <LayoutDashboard size={18} />, label: 'Dashboard', path: '/emp/dashboard' },
+          { icon: <GitFork size={18} />, label: 'Organisation Tree', path: '/organisation' },
           { icon: <LogIn size={18} />, label: 'Sign In / Out', path: '/emp/clock' },
           { icon: <Clock size={18} />, label: 'Attendance List', path: '/emp/attendance' },
           { icon: <Briefcase size={18} />, label: 'Leave List', path: '/emp/leaves' },

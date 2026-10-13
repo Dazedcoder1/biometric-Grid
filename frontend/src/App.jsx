@@ -68,6 +68,7 @@ import LetterTemplates from './pages/documents/LetterTemplates';
 import Policies from './pages/documents/Policies';
 import EmployeeFiles from './pages/documents/EmployeeFiles';
 import MyDocuments from './pages/documents/MyDocuments';
+import OrgTree from './pages/org/OrgTree';
 
 function App() {
   return (
@@ -256,6 +257,17 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['employee', 'user', 'org_admin', 'department_admin', 'tenant_admin']}>
                   <MyPay />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ==================== ORGANISATION TREE ==================== */}
+            {/* Every role; the server decides how much of the tree each sees. */}
+            <Route
+              path="/organisation"
+              element={
+                <ProtectedRoute allowedRoles={['tenant_admin', 'superadmin', 'org_admin', 'department_admin', 'employee', 'user']}>
+                  <OrgTree />
                 </ProtectedRoute>
               }
             />

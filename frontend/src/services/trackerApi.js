@@ -5,6 +5,7 @@
 // ============================================
 // Never localhost on a deployed site — see apiBase.js.
 import { API_BASE_URL } from './apiBase';
+import { authorizedFetch } from './session';
 
 const getToken = () => localStorage.getItem('access_token');
 const getApiKey = () => localStorage.getItem('api_key');
@@ -29,7 +30,7 @@ async function apiRequest(endpoint, options = {}) {
   
   const finalHeaders = { ...headers, ...options.headers };
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await authorizedFetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers: finalHeaders,
   });
