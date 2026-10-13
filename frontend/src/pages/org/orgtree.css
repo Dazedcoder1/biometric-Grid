@@ -247,3 +247,39 @@
 }
 .oc-member { border-radius: 10px; }
 .oc-team-empty { white-space: nowrap; font-size: .72rem; color: var(--text3); padding: .4rem .6rem; border: 1px dashed var(--border2); border-radius: 8px; margin-top: 6px; background: var(--bg2); }
+
+/* ── view toggle (Chart / List) ───────────────────────────────────────────── */
+.ot-viewtoggle { display: inline-flex; border: 1px solid var(--border2); border-radius: 9px; overflow: hidden; flex: none; }
+.ot-viewtoggle button {
+  display: inline-flex; align-items: center; gap: .3rem; border: none; background: var(--bg2);
+  color: var(--text2); padding: .4rem .7rem; font-family: inherit; font-size: .78rem; cursor: pointer;
+}
+.ot-viewtoggle button + button { border-left: 1px solid var(--border2); }
+.ot-viewtoggle button.active { background: var(--teal); color: var(--on-teal); font-weight: 600; }
+
+/* ── list view (the earlier indented look) ────────────────────────────────── */
+.ol-node { margin: 0; }
+.ol-children { margin-left: 1.05rem; padding-left: .9rem; border-left: 1px dashed var(--border2); }
+@media (max-width: 560px) { .ol-children { margin-left: .5rem; padding-left: .55rem; } }
+
+.ol-row {
+  display: flex; align-items: center; gap: .55rem; padding: .42rem .5rem; border-radius: 9px;
+  min-height: 40px; color: var(--text); width: 100%; text-align: left; border: none; background: none;
+  font-family: inherit; font-size: inherit; flex-wrap: wrap;
+}
+.ol-row.person { cursor: pointer; }
+.ol-row.person:hover { background: var(--bg3); }
+.ol-row.person.hit { background: rgba(20,184,166,.14); box-shadow: inset 2px 0 0 var(--teal); }
+.ol-indent { width: 22px; flex: none; }
+.ol-toggle {
+  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--text3); cursor: pointer; border-radius: 6px; flex: none;
+}
+.ol-toggle:hover { background: var(--bg4); color: var(--text); }
+.ol-name { font-weight: 600; font-size: .88rem; }
+.ol-code { font-size: .74rem; color: var(--text3); font-family: var(--mono); }
+.ol-row.label {
+  font-size: .64rem; color: var(--text3); text-transform: uppercase; letter-spacing: .05em;
+  min-height: 0; padding: .35rem .5rem .1rem; gap: .3rem;
+}
+.ol-empty { font-size: .78rem; color: var(--text3); padding: .3rem .5rem .3rem 2.4rem; }
