@@ -15,8 +15,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, AlertTriangle, ArrowRightLeft, Building2, ChevronsDownUp, ChevronsUpDown, Copy, Crown,
-  FolderPlus, KeyRound, Maximize2, Minus, Network, Plus, RefreshCw, Search, Shield, Users, ZoomIn, ZoomOut,
+  AlertCircle, AlertTriangle, ArrowRightLeft, Building2, ChevronDown, ChevronRight, ChevronsDownUp,
+  ChevronsUpDown, Copy, Crown, FolderPlus, GitFork, KeyRound, List, Maximize2, Minus, Network, Plus,
+  RefreshCw, Search, Shield, Users, ZoomIn, ZoomOut,
 } from 'lucide-react';
 
 import DashboardLayout from '../../layouts/DashboardLayout';
@@ -328,6 +329,89 @@ function PersonPanel({ id, onClose, onChanged }) {
   );
 }
 
+// ─── list view ──────────────────────────────────────────────────────────────
+// The earlier look: an indented list rather than a drawn chart. Same data,
+// same actions; some people find it quicker to scan a tall screen.
+
+function ListPerson({ p, onOpen, hit }) {
+  return (
+    <button type="button" className={`ol-row person ${hit ? 'hit' : ''}`} data-person={p.id} onClick={() => onOpen(p)}>
+      <span className="ol-indent" />
+      <Avatar p={p} />
+      <span className="ol-name">{p.name}{p.is_me ? ' (you)' : ''}</span>
+      {p.employee_code && <span className="ol-code">{p.employee_code}</span>}
+      <span className={`ot-role ${p.role}`}>{p.role_label}</span>
+      {p.is_hr && <span className="ot-role hr">HR</span>}
+    </button>
+  );
+}
+
+function ListBranch({ open, onToggle, icon, kind, title, sub, warnings = [], actions, children }) {
+  return (
+    <div className="ol-node">
+      <div className="ol-row branch">
+        <button type="button" className="ol-toggle" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}>
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
+        <span className={`ot-kind ${kind}`}>{icon}</span>
+        <span className="ol-name" style={{ cursor: 'pointer' }} onClick={onToggle}>{title}</span>
+        {sub && <span className="ot-count">{sub}</span>}
+        {warnings.map((w) => <span key={w} className="ot-warn"><AlertTriangle size={10} /> {w}</span>)}
+        {actions && <span className="ot-actions">{actions}</span>}
+      </div>
+      {open && <div className="ol-children">{children}</div>}
+    </div>
+  );
+}
+
+function ListDepartment({ d, canManage, open, toggle, onOpen, onAssign, hitId }) {
+  return (
+    <ListBranch open={open} onToggle={toggle} kind="dept" icon={<Users size={15} />} title={d.name}
+      sub={`${d.count} ${d.count === 1 ? 'person' : 'people'}`} warnings={d.warnings}
+      actions={canManage && d.is_active && (
+        <button type="button" className="ot-mini" onClick={() => onAssign(d)}>
+          <Shield size={11} /> {d.admins.length ? 'Replace admin' : 'Assign admin'}
+        </button>
+      )}>
+      {d.admins.map((p) => <ListPerson key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
+      {d.employees.map((p) => <ListPerson key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
+      {d.admins.length + d.employees.length === 0 && <div className="ol-empty">Nobody in this department yet.</div>}
+    </ListBranch>
+  );
+}
+
+function ListOrganisation({ org, isOpen, toggle, openSet, toggleSet, onOpen, onAddDept, onAssign, hitId }) {
+  const loaded = org.departments !== undefined;
+  const deptCount = org.departments_count ?? (loaded ? org.departments.length : 0);
+  return (
+    <ListBranch open={isOpen} onToggle={toggle} kind="org" icon={<Building2 size={15} />} title={org.name}
+      sub={`${org.count} people · ${deptCount} ${deptCount === 1 ? 'department' : 'departments'}`}
+      warnings={org.warnings}
+      actions={org.can_manage && !org.partial && (
+        <button type="button" className="ot-mini" onClick={() => onAddDept(org)}><FolderPlus size={11} /> Add department</button>
+      )}>
+      {!loaded && <div className="ol-empty">Loading…</div>}
+      {loaded && (
+        <>
+          <div className="ol-row label"><span className="ol-indent" /><Crown size={12} /> Organisation Admin</div>
+          {org.admins.map((p) => <ListPerson key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
+          {org.admins.length === 0 && <div className="ol-empty">None assigned.</div>}
+          {org.departments.map((d) => (
+            <ListDepartment key={d.id} d={d} canManage={org.can_manage} open={openSet.has(`d${d.id}`)}
+              toggle={() => toggleSet(`d${d.id}`)} onOpen={onOpen} onAssign={onAssign} hitId={hitId} />
+          ))}
+          {org.unassigned?.length > 0 && (
+            <ListBranch open={openSet.has(`u${org.id}`)} onToggle={() => toggleSet(`u${org.id}`)} kind="group"
+              icon={<Users size={14} />} title="Not in a department" sub={`${org.unassigned.length}`}>
+              {org.unassigned.map((p) => <ListPerson key={p.id} p={p} onOpen={onOpen} hit={hitId === p.id} />)}
+            </ListBranch>
+          )}
+        </>
+      )}
+    </ListBranch>
+  );
+}
+
 export default function OrgTree() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
@@ -343,6 +427,11 @@ export default function OrgTree() {
   const [zoom, setZoom] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 700 ? 0.8 : 1));
   const [addingTo, setAddingTo] = useState(null);
   const [assigning, setAssigning] = useState(null);
+  // 'chart' (the drawn org chart) or 'list' (the earlier indented list). Remembered.
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem('org_tree_view') === 'list' ? 'list' : 'chart'; } catch { return 'chart'; }
+  });
+  const chooseView = (v) => { setView(v); try { localStorage.setItem('org_tree_view', v); } catch { /* not remembered */ } };
   const openRef = useRef(open);
   useEffect(() => { openRef.current = open; }, [open]);
 
@@ -442,9 +531,28 @@ export default function OrgTree() {
     return () => cancelAnimationFrame(id);
   }, [data, orgDetail, open, zoom]);
 
-  const expandAll = () => {
+  const [expanding, setExpanding] = useState(false);
+  const expandAll = async () => {
+    // A Super Admin's organisations load their departments only when opened,
+    // so fetch any that are not loaded yet before opening everything —
+    // otherwise "Expand all" could only open what had already been seen.
+    let detail = orgDetail;
+    if (data?.scope === 'platform') {
+      const missing = data.root.organisations.filter((o) => !detail[o.id]);
+      if (missing.length) {
+        setExpanding(true);
+        try {
+          const loaded = await Promise.all(missing.map((o) => orgTreeApi.organisation(o.id).catch(() => null)));
+          detail = { ...detail, ...Object.fromEntries(missing.map((o, i) => [o.id, loaded[i]]).filter(([, v]) => v)) };
+          setOrgDetail(detail);
+        } finally { setExpanding(false); }
+      }
+    }
+    const list = data?.scope === 'platform'
+      ? data.root.organisations.map((o) => ({ ...o, ...(detail[o.id] || {}) }))
+      : orgs;
     const keys = ['root'];
-    orgs.forEach((o) => {
+    list.forEach((o) => {
       keys.push(`o${o.id}`);
       (o.departments || []).forEach((d) => keys.push(`d${d.id}`));
       if (o.unassigned?.length) keys.push(`u${o.id}`);
@@ -493,19 +601,35 @@ export default function OrgTree() {
       {notice && <div className="v-banner ok"><span>{notice}</span></div>}
 
       <div className="oc-tools">
-        <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))} aria-label="Zoom out"><ZoomOut size={13} /></button>
-        <span className="ot-count" style={{ minWidth: 38, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} aria-label="Zoom in"><ZoomIn size={13} /></button>
-        <button type="button" className="ot-mini" onClick={() => setZoom(1)}><Maximize2 size={12} /> 100%</button>
+        <div className="ot-viewtoggle" role="group" aria-label="View">
+          <button type="button" className={view === 'chart' ? 'active' : ''} onClick={() => chooseView('chart')}>
+            <GitFork size={13} /> Chart
+          </button>
+          <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => chooseView('list')}>
+            <List size={13} /> List
+          </button>
+        </div>
+        {view === 'chart' && (
+          <>
+            <span style={{ width: 8 }} />
+            <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))} aria-label="Zoom out"><ZoomOut size={13} /></button>
+            <span className="ot-count" style={{ minWidth: 38, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+            <button type="button" className="ot-mini" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} aria-label="Zoom in"><ZoomIn size={13} /></button>
+            <button type="button" className="ot-mini" onClick={() => setZoom(1)}><Maximize2 size={12} /> 100%</button>
+          </>
+        )}
         <span className="grow" />
-        <button type="button" className="ot-mini" onClick={expandAll}><ChevronsUpDown size={12} /> Expand all</button>
+        <button type="button" className="ot-mini" onClick={expandAll} disabled={expanding}>
+          <ChevronsUpDown size={12} /> {expanding ? 'Loading…' : 'Expand all'}
+        </button>
         <button type="button" className="ot-mini" onClick={() => setOpen(new Set(['root']))}><ChevronsDownUp size={12} /> Collapse all</button>
       </div>
 
-      <div className="oc-viewport" ref={viewportRef}
-        onWheel={() => { userMoved.current = true; }} onPointerDown={() => { userMoved.current = true; }}>
-        {!data && !error && <div className="oc-team-empty" style={{ margin: '2rem auto' }}>Loading…</div>}
-        {data && (
+      {!data && !error && <div className="oc-team-empty" style={{ margin: '2rem auto' }}>Loading…</div>}
+
+      {data && view === 'chart' && (
+        <div className="oc-viewport" ref={viewportRef}
+          onWheel={() => { userMoved.current = true; }} onPointerDown={() => { userMoved.current = true; }}>
           <div className="oc" style={{ zoom }}>
             <ul>
               {data.scope === 'platform' ? (
@@ -533,8 +657,27 @@ export default function OrgTree() {
               ))}
             </ul>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {data && view === 'list' && (
+        <div className="ot-tree">
+          {data.scope === 'platform' ? (
+            <ListBranch open={open.has('root')} onToggle={() => toggle('root')} kind="platform"
+              icon={<Network size={15} />} title="Super Admin" sub={`${orgs.length} organisations`}>
+              {orgs.map((o) => (
+                <ListOrganisation key={o.id} org={o} isOpen={open.has(`o${o.id}`)} toggle={() => expandOrg(o.id)}
+                  openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)}
+                  onAddDept={setAddingTo} onAssign={setAssigning} hitId={hitId} />
+              ))}
+            </ListBranch>
+          ) : orgs.map((o) => (
+            <ListOrganisation key={o.id || 'org'} org={o} isOpen={open.has(`o${o.id}`)} toggle={() => toggle(`o${o.id}`)}
+              openSet={open} toggleSet={toggle} onOpen={(p) => setPerson(p.id)}
+              onAddDept={setAddingTo} onAssign={setAssigning} hitId={hitId} />
+          ))}
+        </div>
+      )}
 
       {addingTo && <AddDepartmentModal org={addingTo} onClose={() => setAddingTo(null)}
         onDone={(m) => { setAddingTo(null); changed(m); }} />}
