@@ -735,5 +735,144 @@ class EmployeeDocumentVersion(Base):
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+# =========================
+# WORK REPORTING & TARGETS
+# Day-end reports (what each person did), the focus an admin assigns for a day
+# or week, and longer-term targets with milestones shown on a Gantt timeline.
+# See app/services/reporting.py.
+# =========================
+
+class WorkAssignment(Base):
+    """
+    A piece of work an admin assigns to a person, reported on in their
+    day-end report. It stays on their list from start_date until it is done
+    (or cancelled) — that is the carry-over: unfinished work simply remains.
+    """
+    __tablename__ = "work_assignments"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    period = Column(String(8), nullable=False, default="day")      # day | week (how it was first set)
+    start_date = Column(Date, nullable=False)                      # first day it appears
+    end_date = Column(Date, nullable=False)                        # original window; due_date is the deadline
+    title = Column(String(200), nullable=False)
+    details = Column(Text, nullable=True)
+    target_id = Column(Integer, ForeignKey("targets.id", ondelete="SET NULL"), nullable=True)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    priority = Column(String(8), nullable=False, default="medium", server_default="medium")  # low|medium|high|urgent
+    due_date = Column(Date, nullable=True)
+    status = Column(String(12), nullable=False, default="not_started", server_default="not_started")
+    #   not_started | in_progress | blocked | done | cancelled
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    completed_on = Column(Date, nullable=True)                     # the report date it was marked done
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_work_assignment_user_dates", "user_id", "start_date", "end_date"),
+        Index("ix_work_assignment_user_status", "user_id", "status"),
+    )
+
+
+class DailyReport(Base):
+    """One person's day-end report. One per person per day."""
+    __tablename__ = "daily_reports"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    report_date = Column(Date, nullable=False)
+    summary = Column(Text, nullable=True)
+    status = Column(String(12), nullable=False, default="draft", server_default="draft")  # draft | submitted
+    hours_total = Column(Numeric(5, 2), nullable=False, default=0, server_default="0")
+    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    review_note = Column(String(500), nullable=True)
+    blockers = Column(Text, nullable=True)
+    tomorrow_plan = Column(Text, nullable=True)
+    is_late = Column(Boolean, nullable=False, default=False, server_default="false")   # submitted after the day
+    clock_seconds = Column(Integer, nullable=True)        # signed-in time that day, captured at submit
+    reopened_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reopened_at = Column(DateTime(timezone=True), nullable=True)
+    reopen_note = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "report_date", name="uq_daily_report_user_date"),
+        Index("ix_daily_report_tenant_date", "tenant_id", "report_date"),
+    )
+
+
+class DailyReportLine(Base):
+    """One thing done, inside a day-end report."""
+    __tablename__ = "daily_report_lines"
+
+    id = Column(Integer, primary_key=True)
+    report_id = Column(Integer, ForeignKey("daily_reports.id", ondelete="CASCADE"), nullable=False, index=True)
+    what = Column(String(500), nullable=False)
+    hours = Column(Numeric(4, 2), nullable=True)
+    status = Column(String(12), nullable=False, default="done")    # not_started | in_progress | blocked | done
+    target_id = Column(Integer, ForeignKey("targets.id", ondelete="SET NULL"), nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+    # What this line reports on: an assigned item, a Task Manager task, or neither (other work).
+    assignment_id = Column(Integer, ForeignKey("work_assignments.id", ondelete="SET NULL"), nullable=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    progress = Column(Integer, nullable=True)                       # 0-100
+    note = Column(String(500), nullable=True)
+
+
+class Target(Base):
+    """
+    A goal with a start and an end, shown on a Gantt timeline. Owned by one
+    person, or by a department (user_id NULL, dept_id set). Progress is a
+    percentage the owner keeps up to date; milestones sit under it.
+    """
+    __tablename__ = "targets"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    dept_id = Column(Integer, ForeignKey("departments.department_id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    progress = Column(Integer, nullable=False, default=0, server_default="0")  # 0..100
+    status = Column(String(12), nullable=False, default="active", server_default="active")  # active | done | cancelled
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("ix_target_tenant_dates", "tenant_id", "start_date", "end_date"),)
+
+
+class TargetMilestone(Base):
+    """A checkpoint on the way to a target, with its own due date."""
+    __tablename__ = "target_milestones"
+
+    id = Column(Integer, primary_key=True)
+    target_id = Column(Integer, ForeignKey("targets.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    due_date = Column(Date, nullable=True)
+    done = Column(Boolean, nullable=False, default=False, server_default="false")
+    done_at = Column(DateTime(timezone=True), nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0, server_default="0")
+
+
+class TargetUpdate(Base):
+    """A note in a target's history: progress changed, a comment, a status change."""
+    __tablename__ = "target_updates"
+
+    id = Column(Integer, primary_key=True)
+    target_id = Column(Integer, ForeignKey("targets.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    progress = Column(Integer, nullable=True)
+    note = Column(String(1000), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # Legacy compat alias
 AdminUser = User

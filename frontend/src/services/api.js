@@ -89,7 +89,8 @@ function pickAuthHeaders(endpoint) {
   // honours the header for super_admin only and ignores it for anyone else,
   // whose organisation is fixed by their account.
   if (endpoint.startsWith('/api/vault') || endpoint.startsWith('/api/accounts')
-      || endpoint.startsWith('/api/payroll') || endpoint.startsWith('/api/documents')) {
+      || endpoint.startsWith('/api/payroll') || endpoint.startsWith('/api/documents')
+      || endpoint.startsWith('/api/reporting')) {
     const acting = getActingTenantId();
     if (acting) headers['X-Acting-Tenant-Id'] = acting;
   }
@@ -303,6 +304,44 @@ export const payrollApi = {
 };
 
 // The organisation hierarchy, scoped by the server to whoever asks.
+export const reportingApi = {
+  // Day-end report (self)
+  day: (date) => apiRequest(`/api/reporting/me/day${date ? `?date=${date}` : ''}`),
+  myReports: (days = 30) => apiRequest(`/api/reporting/me/reports?days=${days}`),
+  getMyReport: (date) => apiRequest(`/api/reporting/me/reports/${date}`),
+  saveMyReport: (date, data) => apiRequest(`/api/reporting/me/reports/${date}`, { method: 'PUT', body: JSON.stringify(data) }),
+  submitMyReport: (date) => apiRequest(`/api/reporting/me/reports/${date}/submit`, { method: 'POST' }),
+  myTargets: () => apiRequest('/api/reporting/me/targets'),
+  setMyProgress: (id, progress, note) => apiRequest(`/api/reporting/me/targets/${id}/progress`, { method: 'POST', body: JSON.stringify({ progress, note: note || null }) }),
+
+  // Admin
+  people: () => apiRequest('/api/reporting/people'),
+  departments: () => apiRequest('/api/reporting/departments'),
+  teamReports: (date) => apiRequest(`/api/reporting/team/reports${date ? `?date=${date}` : ''}`),
+  report: (id) => apiRequest(`/api/reporting/reports/${id}`),
+  review: (id, note) => apiRequest(`/api/reporting/reports/${id}/review`, { method: 'POST', body: JSON.stringify({ note: note || null }) }),
+  reopen: (id, note) => apiRequest(`/api/reporting/reports/${id}/reopen`, { method: 'POST', body: JSON.stringify({ note }) }),
+  teamItems: (userId, date) => apiRequest(`/api/reporting/team/items?user_id=${userId}${date ? `&date=${date}` : ''}`),
+  assign: (data) => apiRequest('/api/reporting/assignments', { method: 'POST', body: JSON.stringify(data) }),
+  editAssignment: (id, data) => apiRequest(`/api/reporting/assignments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  removeAssignment: (id) => apiRequest(`/api/reporting/assignments/${id}`, { method: 'DELETE' }),
+
+  // Targets
+  targets: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    const qs = q.toString();
+    return apiRequest(`/api/reporting/targets${qs ? `?${qs}` : ''}`);
+  },
+  target: (id) => apiRequest(`/api/reporting/targets/${id}`),
+  createTarget: (data) => apiRequest('/api/reporting/targets', { method: 'POST', body: JSON.stringify(data) }),
+  editTarget: (id, data) => apiRequest(`/api/reporting/targets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTarget: (id) => apiRequest(`/api/reporting/targets/${id}`, { method: 'DELETE' }),
+  setProgress: (id, progress, note) => apiRequest(`/api/reporting/targets/${id}/progress`, { method: 'POST', body: JSON.stringify({ progress, note: note || null }) }),
+  addMilestone: (id, data) => apiRequest(`/api/reporting/targets/${id}/milestones`, { method: 'POST', body: JSON.stringify(data) }),
+  editMilestone: (id, mid, data) => apiRequest(`/api/reporting/targets/${id}/milestones/${mid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteMilestone: (id, mid) => apiRequest(`/api/reporting/targets/${id}/milestones/${mid}`, { method: 'DELETE' }),
+};
+
 export const orgTreeApi = {
   tree: () => apiRequest('/api/org-tree'),
   organisation: (tenantId) => apiRequest(`/api/org-tree/orgs/${tenantId}`),

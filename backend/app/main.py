@@ -40,12 +40,16 @@ async def lifespan(app: FastAPI):
     from app.services.hr_documents import reminder_loop
     docs_task = asyncio.create_task(reminder_loop())
 
+    # Nudges people who worked today but have not filed their day-end report.
+    from app.services.report_reminders import reminder_loop as report_reminder_loop
+    report_task = asyncio.create_task(report_reminder_loop())
+
     yield
 
     logger.info("Shutting down...")
-    for task in (github_task, share_task, docs_task):
+    for task in (github_task, share_task, docs_task, report_task):
         task.cancel()
-    for task in (github_task, share_task, docs_task):
+    for task in (github_task, share_task, docs_task, report_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -169,6 +173,11 @@ app.include_router(documents_router, prefix="/api/documents", tags=["HR Document
 from app.api.routes.org_tree import router as org_tree_router
 
 app.include_router(org_tree_router, prefix="/api/org-tree", tags=["Organisation tree"])
+
+# ─── Work reporting & targets ─────────────────────────────────────────────────
+from app.api.routes.reporting import router as reporting_router
+
+app.include_router(reporting_router, prefix="/api/reporting", tags=["Reporting & Targets"])
 
 # ─── Employee (uses JWT Bearer) ───────────────────────────────────────────────
 from app.api.routes.employee.dashboard      import router as emp_dash_router

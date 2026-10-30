@@ -58,7 +58,12 @@ CREDENTIAL_ACTIONS = (
 #: CREDENTIAL_ACTIONS already filters for both and the wording is settled — but
 #: named here so the map does not quietly imply the system records things it
 #: does not. Delete from this set when the feature that writes them lands.
-RESERVED = {"credential.viewed", "ownership.transferred"}
+RESERVED = {
+    "credential.viewed", "ownership.transferred",
+    # Day-end v1 recorded these before a "focus" became an assigned work item.
+    # No longer written, but kept so older log entries still read properly.
+    "report.focus_assigned", "report.focus_removed",
+}
 
 LABELS = {
     # credentials
@@ -128,6 +133,18 @@ LABELS = {
     "document.renewed": "uploaded a renewed document",
     "document.updated": "changed a document's details",
     "document.downloaded": "downloaded an employee document",
+    "report.submitted": "submitted a day-end report",
+    "report.reviewed": "reviewed a day-end report",
+    "report.focus_assigned": "set a work focus",
+    "report.focus_removed": "removed a work focus",
+    "report.item_assigned": "assigned work",
+    "report.item_updated": "changed assigned work",
+    "report.item_removed": "removed assigned work",
+    "report.reopened": "reopened a day-end report",
+    "target.created": "created a target",
+    "target.updated": "changed a target",
+    "target.deleted": "deleted a target",
+    "target.progress_updated": "updated target progress",
     "payroll.component_created": "added a pay component",
     "payroll.component_updated": "changed a pay component",
     "payroll.profile_updated": "updated pay details",
@@ -235,6 +252,8 @@ CATEGORIES = {
     "department": "people",
     "attendance": "attendance",
     "payroll": "payroll",
+    "report": "reporting",
+    "target": "reporting",
     "letter": "documents",
     "policy": "documents",
     "document": "documents",
@@ -282,6 +301,7 @@ LOGS: dict[str, dict] = {
     "vault":        {"label": "Vault & access",      "categories": ("credential", "access", "structure")},
     "devices":      {"label": "Devices",             "categories": ("devices",)},
     "tasks":        {"label": "Tasks",               "categories": ("tasks",)},
+    "reporting":    {"label": "Reports & targets",   "categories": ("reporting",)},
     "organisation": {"label": "Organisation",        "categories": ("platform", "audit", "other")},
     "security":     {"label": "Security alerts",     "categories": ()},
 }

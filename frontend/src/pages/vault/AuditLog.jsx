@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Building2, CalendarDays, CheckSquare, Cpu, Download, FileSearch, FileText, IndianRupee,
+  AlertCircle, Building2, CalendarDays, CheckSquare, ClipboardList, Cpu, Download, FileSearch, FileText, IndianRupee,
   KeyRound, Layers, LogIn, RefreshCw, ShieldAlert, ShieldCheck, Siren, UserCog, X,
 } from 'lucide-react';
 
@@ -49,6 +49,7 @@ const LOGS = [
   { key: 'attendance', label: 'Attendance & leave', icon: CalendarDays, about: 'Web sign-in clock, leave requests and decisions, holidays and office-hours settings.' },
   { key: 'payroll', label: 'Payroll', icon: IndianRupee, about: 'Pay components, salary revisions, payroll months, payslips and expense claims.' },
   { key: 'documents', label: 'HR documents', icon: FileText, about: 'Letters, templates, policies and acknowledgements, and employee documents.' },
+  { key: 'reporting', label: 'Reports & targets', icon: ClipboardList, about: 'Day-end reports submitted and reviewed, work focus, and targets and their progress.' },
   { key: 'vault', label: 'Vault & access', icon: KeyRound, about: 'Credentials revealed, created, rotated and shared; systems and dependencies.' },
   { key: 'devices', label: 'Devices', icon: Cpu, about: 'Scanners registered, changed and sent commands.' },
   { key: 'tasks', label: 'Tasks', icon: CheckSquare, about: 'Tasks and GitHub repositories.' },

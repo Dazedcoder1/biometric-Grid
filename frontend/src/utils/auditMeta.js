@@ -8,7 +8,7 @@
 // only decides the icon and the colour.
 
 import {
-  Building2, CalendarDays, CheckSquare, Cpu, Database, FileDown, FileText, IndianRupee, KeyRound,
+  Building2, CalendarDays, CheckSquare, ClipboardList, Cpu, Database, FileDown, FileText, IndianRupee, KeyRound,
   Network, ShieldCheck, UserCog, Users,
 } from 'lucide-react';
 
@@ -23,6 +23,7 @@ export const CATEGORY_META = {
   tasks:      { icon: CheckSquare,  label: 'Tasks',             tint: 'var(--cat-tasks)' },
   payroll:    { icon: IndianRupee,  label: 'Payroll',           tint: 'var(--cat-payroll)' },
   documents:  { icon: FileText,     label: 'HR documents',      tint: 'var(--cat-documents)' },
+  reporting:  { icon: ClipboardList, label: 'Reports & targets',  tint: 'var(--cat-reporting)' },
   credential: { icon: KeyRound,     label: 'Credential',        tint: 'var(--teal)' },
   access:     { icon: Users,        label: 'Access',            tint: 'var(--info)' },
   structure:  { icon: Network,      label: 'Structure',         tint: 'var(--text3)' },
