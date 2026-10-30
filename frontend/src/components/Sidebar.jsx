@@ -3,7 +3,7 @@ import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import {
   Building2, ChevronsUpDown, IndianRupee, Key, LayoutGrid, Lock, LogIn, LogOut, Monitor, Receipt,
-  FileSignature, FolderOpen, Files, GitFork, ScrollText as PolicyIcon, SlidersHorizontal, Stamp, Timer, Wallet,
+  ClipboardList, FileSignature, FolderOpen, Files, GitFork, Goal, Sunset, ScrollText as PolicyIcon, SlidersHorizontal, Stamp, Timer, Wallet,
 } from 'lucide-react';
 import { 
   BarChart3, 
@@ -57,6 +57,9 @@ const TENANT_ITEMS = [
   { icon: <Stamp size={18} />, label: 'Letter Templates', path: '/documents/templates' },
   { icon: <PolicyIcon size={18} />, label: 'Policies & Handbook', path: '/documents/policies' },
   { icon: <FolderOpen size={18} />, label: 'Employee Documents', path: '/documents/files' },
+  { section: 'Reporting' },
+  { icon: <ClipboardList size={18} />, label: 'Team Reports', path: '/reporting/team' },
+  { icon: <Goal size={18} />, label: 'Targets', path: '/reporting/targets' },
 ];
 
 const Sidebar = ({ role, label, iconColor }) => {
@@ -145,6 +148,9 @@ const Sidebar = ({ role, label, iconColor }) => {
           { icon: <Stamp size={18} />, label: 'Letter Templates', path: '/documents/templates' },
           { icon: <PolicyIcon size={18} />, label: 'Policies & Handbook', path: '/documents/policies' },
           { icon: <FolderOpen size={18} />, label: 'Employee Documents', path: '/documents/files' },
+          { section: 'Reporting' },
+          { icon: <ClipboardList size={18} />, label: 'Team Reports', path: '/reporting/team' },
+          { icon: <Goal size={18} />, label: 'Targets', path: '/reporting/targets' },
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'Vault', path: '/vault' },
           // Everyone in the organisation, one vault at a time.
@@ -171,6 +177,10 @@ const Sidebar = ({ role, label, iconColor }) => {
           { section: 'Payroll' },
           { icon: <Wallet size={18} />, label: 'My Pay', path: '/my-pay' },
           { icon: <Files size={18} />, label: 'My Documents', path: '/my-documents' },
+          { section: 'Reporting' },
+          { icon: <Sunset size={18} />, label: 'My Day', path: '/my-day' },
+          { icon: <ClipboardList size={18} />, label: 'Team Reports', path: '/reporting/team' },
+          { icon: <Goal size={18} />, label: 'Targets', path: '/reporting/targets' },
           ...(user?.isHr ? HR_ITEMS.slice(1) : [
             { icon: <Receipt size={18} />, label: 'Expense Claims', path: '/payroll/claims' },
           ]),
@@ -195,6 +205,9 @@ const Sidebar = ({ role, label, iconColor }) => {
           // log — that needs `audit.view`, which their role does not carry.
           { icon: <Wallet size={18} />, label: 'My Pay', path: '/my-pay' },
           { icon: <Files size={18} />, label: 'My Documents', path: '/my-documents' },
+          { section: 'Reporting' },
+          { icon: <Sunset size={18} />, label: 'My Day', path: '/my-day' },
+          { icon: <Goal size={18} />, label: 'My Targets', path: '/reporting/targets' },
           ...HR_ITEMS,
           { section: 'Credential Vault' },
           { icon: <KeyRound size={18} />, label: 'My Vault', path: '/vault' },

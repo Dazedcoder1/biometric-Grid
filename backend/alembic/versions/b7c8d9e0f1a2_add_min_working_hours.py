@@ -23,8 +23,32 @@ branch_labels = None
 depends_on = None
 
 
+def _ensure_column(table: str, column: sa.Column, fill_sql: str | None = None) -> None:
+    """Add the column, or — if it already exists — bring it in line.
+
+    b1c2d3e4f5a6 builds tables from the *current* models, so on a fresh
+    database this column can already be there (added nullable). Rather than
+    fail with DuplicateColumn, backfill and apply this migration's definition.
+    """
+    bind = op.get_bind()
+    present = {c["name"] for c in sa.inspect(bind).get_columns(table)}
+    if column.name not in present:
+        op.add_column(table, column)
+        return
+    if fill_sql is not None:
+        bind.execute(sa.text(
+            f"UPDATE {table} SET {column.name} = {fill_sql} WHERE {column.name} IS NULL"
+        ))
+    op.alter_column(
+        table, column.name,
+        existing_type=column.type,
+        nullable=column.nullable,
+        server_default=column.server_default.arg if column.server_default is not None else None,
+    )
+
+
 def upgrade() -> None:
-    op.add_column(
+    _ensure_column(
         "settings",
         sa.Column(
             "min_working_hours",
@@ -32,6 +56,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="9.0",
         ),
+        fill_sql="9.0",
     )
 
 

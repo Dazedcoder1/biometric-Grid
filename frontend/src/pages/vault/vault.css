@@ -490,6 +490,7 @@
   --cat-platform: #f472b6;
   --cat-payroll: #2dd4bf;
   --cat-documents: #fb923c;
+  --cat-reporting: #38bdf8;
 }
 :root.light-mode {
   --cat-auth: #7e22ce;
@@ -500,6 +501,7 @@
   --cat-platform: #be185d;
   --cat-payroll: #0f766e;
   --cat-documents: #c2410c;
+  --cat-reporting: #0369a1;
 }
 
 /* The row above the numbers: scope picker, live marker, last update, refresh.

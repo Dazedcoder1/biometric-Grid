@@ -104,6 +104,11 @@ CATALOGUE: tuple[PermissionDef, ...] = (
         "Manage letter templates and letterhead, issue letters, publish policies and file documents",
     ),
 
+    PermissionDef("report.view", "Read the day-end reports of people you oversee"),
+    PermissionDef("report.manage", "Assign a daily or weekly focus, and review reports"),
+    PermissionDef("target.view", "Read the targets of people you oversee"),
+    PermissionDef("target.manage", "Create and assign targets and milestones"),
+
     PermissionDef("audit.view", "Read the audit log"),
     PermissionDef("audit.verify", "Run the hash-chain verification pass"),
 )
@@ -147,6 +152,7 @@ SYSTEM_ROLES: dict[str, dict] = {
             "payroll.view", "payroll.manage", "payroll.approve",
             "reimbursement.approve",
             "documents.view", "documents.manage",
+            "report.view", "report.manage", "target.view", "target.manage",
             # credential.reveal was withheld here while the only way to be a
             # Tenant Admin was a long-lived API key: a key carries a tenant and
             # not a person, so the audit log could not name who held it, and a
@@ -186,6 +192,7 @@ SYSTEM_ROLES: dict[str, dict] = {
             "audit.view",
             # Expense claims of their own department's people (route-enforced).
             "reimbursement.approve",
+            "report.view", "report.manage", "target.view", "target.manage",
         ),
     },
     # Not a role anyone signs in as on its own: it is added to an employee's or
@@ -200,6 +207,7 @@ SYSTEM_ROLES: dict[str, dict] = {
             "payroll.view", "payroll.manage", "payroll.approve",
             "reimbursement.approve",
             "documents.view", "documents.manage",
+            "report.view", "report.manage", "target.view", "target.manage",
         ),
     },
     "employee": {

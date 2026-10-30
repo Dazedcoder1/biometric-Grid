@@ -69,6 +69,9 @@ import Policies from './pages/documents/Policies';
 import EmployeeFiles from './pages/documents/EmployeeFiles';
 import MyDocuments from './pages/documents/MyDocuments';
 import OrgTree from './pages/org/OrgTree';
+import MyDay from './pages/reporting/MyDay';
+import TeamReports from './pages/reporting/TeamReports';
+import Targets from './pages/reporting/Targets';
 
 function App() {
   return (
@@ -260,6 +263,11 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* ==================== REPORTING & TARGETS ==================== */}
+            <Route path="/my-day" element={<ProtectedRoute allowedRoles={['tenant_admin', 'superadmin', 'org_admin', 'department_admin', 'employee', 'user']}><MyDay /></ProtectedRoute>} />
+            <Route path="/reporting/targets" element={<ProtectedRoute allowedRoles={['tenant_admin', 'superadmin', 'org_admin', 'department_admin', 'employee', 'user']}><Targets /></ProtectedRoute>} />
+            <Route path="/reporting/team" element={<ProtectedRoute allowedRoles={['tenant_admin', 'superadmin', 'org_admin', 'department_admin']} allowHr><TeamReports /></ProtectedRoute>} />
 
             {/* ==================== ORGANISATION TREE ==================== */}
             {/* Every role; the server decides how much of the tree each sees. */}
