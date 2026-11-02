@@ -74,8 +74,11 @@ services:
       # restart: unless-stopped, on every crash too.
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      # Access tokens stay short; the app renews them in the background, so a
+      # session lasts as long as it is used. The refresh window restarts on
+      # every renewal: REFRESH_TOKEN_EXPIRE_DAYS of inactivity signs you out.
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
 
       # Blank disables GitHub sync; manual tasks still work. Once set, do not
       # change it — stored GitHub tokens become undecryptable.
